@@ -45,7 +45,22 @@
     font-weight: 600;
   }
   button:disabled { opacity: 0.6; }
-  #status { margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid #444;
+    color: #eee;
+  }
+  #status, #unpinStatus { margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
+  .divider {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #333;
+  }
+  .divider p {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    color: #888;
+  }
 </style>
 </head>
 <body>
@@ -56,6 +71,13 @@
     <button type="submit">Send</button>
   </form>
   <div id="status"></div>
+
+  <div class="divider">
+    <p>Pinned something and want it to rotate normally again?</p>
+    <button id="unpinButton" type="button" class="secondary">Unpin current message</button>
+    <div id="unpinStatus"></div>
+  </div>
+
   <script>
     document.getElementById("composeForm").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -77,6 +99,28 @@
         if (!res.ok) throw new Error(await res.text());
         status.textContent = "Sent.";
         form.reset();
+      } catch (err) {
+        status.textContent = "Failed: " + err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById("unpinButton").addEventListener("click", async () => {
+      const button = document.getElementById("unpinButton");
+      const status = document.getElementById("unpinStatus");
+
+      button.disabled = true;
+      status.textContent = "Checking what's on the board…";
+      try {
+        const current = await fetch("/current").then((r) => r.json());
+        if (current.id == null) {
+          status.textContent = "Nothing is currently showing.";
+          return;
+        }
+        const res = await fetch(`/queue/${current.id}/unpin`, { method: "POST" });
+        if (!res.ok) throw new Error(await res.text());
+        status.textContent = "Unpinned — it'll rotate normally now.";
       } catch (err) {
         status.textContent = "Failed: " + err.message;
       } finally {

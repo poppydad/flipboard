@@ -65,7 +65,8 @@ renderer/                 Canvas 2D renderer. Consumes the engine, never the rev
 
 service/                  FastAPI + SQLite. LAN only, no auth.
   main.py                  GET /current, POST /message, POST /compose/smart,
-                           GET /queue, DELETE /queue/{id}, POST /next, GET /compose
+                           GET /queue, DELETE /queue/{id}, POST /queue/{id}/unpin,
+                           POST /next, GET /compose
   db.py                    SQLite schema (messages, display_log)
   compose/                 The layout engine — normalize/wrap/align/render/
                            templates. See "The layout engine" below.
@@ -178,6 +179,7 @@ curl -X POST http://localhost:8000/compose/smart \
 curl http://localhost:8000/queue          # everything queued: id, text, priority, pinned, page count
 curl http://localhost:8000/current        # exactly what's on the board right now, as raw cell codes
 curl -X POST http://localhost:8000/next   # force-advance instead of waiting out dwell_seconds
+curl -X POST http://localhost:8000/queue/3/unpin   # unpin a message so it rejoins normal rotation
 curl -X DELETE http://localhost:8000/queue/3   # delete a test message by id (from /queue above)
 ```
 
@@ -288,6 +290,9 @@ curl http://localhost:8000/current
 # Force the board to advance to the next eligible message immediately,
 # instead of waiting out the current one's dwell_seconds
 curl -X POST http://localhost:8000/next
+
+# Unpin a message so it rejoins normal rotation instead of staying up forever
+curl -X POST http://localhost:8000/queue/3/unpin
 
 # Delete a test message by id (from the /queue output above)
 curl -X DELETE http://localhost:8000/queue/3

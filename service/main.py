@@ -167,6 +167,19 @@ def delete_queue_item(message_id: int):
     return {"deleted": message_id}
 
 
+@app.post("/queue/{message_id}/unpin")
+def unpin_queue_item(message_id: int):
+    conn = db.get_connection()
+    try:
+        cur = conn.execute("UPDATE messages SET pinned = 0 WHERE id = ?", (message_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="message not found")
+    return {"unpinned": message_id}
+
+
 @app.post("/next")
 def force_next():
     conn = db.get_connection()
