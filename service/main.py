@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from . import db
 from .channels.scheduler import start_scheduler, stop_scheduler
-from .compose import BLANK_GRID, CHARSET_VERSION
+from .compose import BLANK_GRID, CHARSET_VERSION, pick_smart_template
 from .config import BRIGHTNESS_NORMAL, BRIGHTNESS_QUIET_FLOOR, is_quiet_hours
 from .messages import create_message
 from .selection import Selector
@@ -101,6 +101,33 @@ def post_message(msg: MessageIn):
             conn,
             source="manual",
             text=msg.text,
+            priority=msg.priority,
+            dwell_seconds=msg.dwell_seconds,
+            starts_at=msg.starts_at.timestamp() if msg.starts_at else None,
+            expires_at=msg.expires_at.timestamp() if msg.expires_at else None,
+            pinned=msg.pinned,
+        )
+        row = conn.execute("SELECT * FROM messages WHERE id = ?", (ids[0],)).fetchone()
+    finally:
+        conn.close()
+    return _row_to_out(row, pages=len(ids))
+
+
+@app.post("/compose/smart", response_model=MessageOut)
+def post_compose_smart(msg: MessageIn):
+    """Same as POST /message, but tries the free heuristic template
+    picker (service/compose/smart.py) first — countdown/stat/list shapes
+    get a structured template grid instead of a plain wrapped banner.
+    Text that matches nothing falls straight through to the normal
+    render() path, so this is never worse than POST /message."""
+    grid = pick_smart_template(msg.text)
+    conn = db.get_connection()
+    try:
+        ids = create_message(
+            conn,
+            source="manual",
+            grid=grid,
+            text=None if grid is not None else msg.text,
             priority=msg.priority,
             dwell_seconds=msg.dwell_seconds,
             starts_at=msg.starts_at.timestamp() if msg.starts_at else None,

@@ -10,6 +10,7 @@ from .align import align
 from .charset import BLANK_CODE, BLANK_GRID, CHARSET, CHARSET_VERSION, COLS, ROWS
 from .normalize import normalize
 from .render import render
+from .smart import pick as pick_smart_template
 from .templates import TEMPLATES, banner, chips, countdown, list_template, stat
 from .wrap import wrap
 
@@ -25,6 +26,7 @@ __all__ = [
     "countdown",
     "list_template",
     "normalize",
+    "pick_smart_template",
     "render",
     "ROWS",
     "stat",

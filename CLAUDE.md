@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 65/65 passing
+.venv/bin/python -m pytest service/tests/   # 77/77 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -255,6 +255,42 @@ service/
   standalone `python -c "..."` script can't call it directly; verifying
   the scheduler wiring needed `asyncio.run(...)`, same as it naturally
   gets from uvicorn's loop via the FastAPI lifespan in production.
+
+## `POST /compose/smart` — free heuristic version, not the Claude one
+
+The plan's §11 gates `/compose/smart` on Claude actually deciding
+template/shape, behind "probe 7 was green" — probe 7 was never run
+(it's a paid API call), and there's still no `ANTHROPIC_API_KEY` in
+this environment. The user chose the free path now, Claude-backed later
+if the key ever gets set up: `service/compose/smart.py`'s `pick(text)`
+recognizes a handful of text shapes by regex and maps them straight
+onto the existing templates, no network call:
+
+- `"5 days until vacation"` / `"trash pickup in 2 days"` → `countdown`
+- `"Outside: 72F, feels chilly"` (colon, <3 comma items) → `stat`
+- `"Groceries: milk, eggs, bread"` (colon, ≥3 comma items) → `list`
+- multi-line text (header line + item lines) → `list`
+- anything else → `None`
+
+`None` isn't a failure — `POST /compose/smart` in `service/main.py`
+falls straight through to the normal `create_message(text=...)` path
+(the same one `POST /message` already uses) whenever nothing matches,
+so this endpoint is never worse than plain `/message`, only sometimes
+better. 12 new tests in `service/tests/test_smart.py`, covering both
+the matches and the "why didn't this match" edge cases (label too long,
+single line with no colon, digit-led text that isn't actually a
+countdown). Live-verified end to end: posted all four shapes through
+the running service, decoded the stored grids back to text to confirm
+correct centering/wrapping, confirmed `/current` correctly selected the
+countdown message, and watched `"VACATION / 5 / DAYS"` render correctly
+on the actual canvas in the browser.
+
+If the user later sets up `ANTHROPIC_API_KEY`, the plan is to add a
+second picker (an actual Claude call, validated against the engine,
+falling back to `banner` per §11) and let `/compose/smart` try that
+first, falling back to this heuristic version, not replace it — the
+heuristic path costs nothing and needs no network, so it's worth
+keeping as the fallback rather than deleting once Claude is wired in.
 
 ## Constraints that shouldn't move
 

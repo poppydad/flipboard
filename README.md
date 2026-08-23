@@ -1,11 +1,49 @@
 # flipboard
 
-Self-hosted split-flap message board. See `flipboard-build-plan-v2.md` for the
-full plan — this repo covers **Phase 0** through **Phase 3**, plus 3 of 6
-**Phase 4** channels (milestone, weather, f1) and the scheduler/quiet-hours
-infrastructure they run on — see "Channels and quiet hours" below.
+Self-hosted split-flap message board — a display made of small mechanical
+tiles that flip through letters/numbers/colors one at a time to spell out a
+message, the same mechanism as an old airport departure board (this project
+replaces a $3,400 commercial one, a "Vestaboard," with a Raspberry Pi and a
+screen). See `flipboard-build-plan-v2.md` for the full plan — this repo
+covers **Phase 0** through **Phase 3**, plus 3 of 6 **Phase 4** channels
+(milestone, weather, f1) and the scheduler/quiet-hours infrastructure they
+run on — see "Channels and quiet hours" below.
+
+If you just want to **put a message on a board someone else already set
+up**, no coding or terminal required — see "Posting a message" below.
+Everything else in this README is for setting the project up or working
+on its code.
+
+## Posting a message (no terminal needed)
+
+The board is a small always-on computer (a Raspberry Pi) on your home
+network, showing whatever message the software decides is current. If
+one is already running and you just want to put text on it:
+
+1. Make sure your phone or laptop is on the same Wi-Fi as the board.
+2. Open a web browser and go to `http://<the board's address>:8000/compose`
+   — ask whoever set it up for the address if you don't know it (it
+   looks like `192.168.1.42`, four numbers separated by dots).
+3. Type your message. Check **"Pin"** if you want it to stay up until
+   someone unpins it — otherwise it takes its turn in rotation with
+   anything else queued (weather updates, other messages, etc). Tap
+   **Send**. It appears on the board within about 5 seconds.
+
+**One-tap posting from an iPhone** (set up once, optional): open the
+**Shortcuts** app → tap **+** for a new shortcut → add an **"Ask for
+Text"** action → add a **"Get Contents of URL"** action below it, set
+the URL to `http://<the board's address>:8000/message`, method
+**POST**, and the request body to JSON with `{"text": "Provided Input"}`
+(tap the text field and choose the "Provided Input" variable from the
+Ask for Text step above it, instead of typing it literally). Name the
+shortcut "Post to Board" and add it to your Home Screen — now posting
+is one tap, type your message, done.
 
 ## What's here
+
+The rest of this README is for people setting up, running, or changing
+the code. If any of the terms below are unfamiliar, "Prerequisites"
+right after this section explains the stack in plain language.
 
 ```
 spec/charset.json        Single source of truth for the flap order (63 positions:
@@ -26,8 +64,8 @@ renderer/                 Canvas 2D renderer. Consumes the engine, never the rev
   display.html              Entry point — npm run dev, open /display.html
 
 service/                  FastAPI + SQLite. LAN only, no auth.
-  main.py                  GET /current, POST /message, GET /queue,
-                           DELETE /queue/{id}, POST /next, GET /compose
+  main.py                  GET /current, POST /message, POST /compose/smart,
+                           GET /queue, DELETE /queue/{id}, POST /next, GET /compose
   db.py                    SQLite schema (messages, display_log)
   compose/                 The layout engine — normalize/wrap/align/render/
                            templates. See "The layout engine" below.
@@ -36,7 +74,7 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   messages.py              create_message(): shared by POST /message and channels
   channels/                Scheduler + plugin interface + milestone/weather/f1
   web/compose.html         Phone-friendly posting form, no framework
-  tests/                   65 pytest tests
+  tests/                   77 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -46,6 +84,40 @@ python/
   charset.py                Python mirror of engine/charset.ts, shared with service/
   verify_parity.py          Proves TS and Python agree on the charset exactly
 ```
+
+## Prerequisites
+
+What each piece of the stack actually is, for anyone new to this
+particular combination of tools:
+
+- **The engine + renderer are TypeScript**, run with **Node.js**. The
+  engine computes the flap physics; the renderer draws it to a
+  `<canvas>` in a browser. **Vite** (`npm run dev`) is just the dev
+  server that serves that browser page and rebuilds it on save.
+- **The backend is Python**, using **FastAPI** (a web framework — it's
+  what answers `GET`/`POST` requests like `/message` and `/current`)
+  and **SQLite** (a database that's a single file on disk, `service/
+  flipboard.db` — no separate database server to install or run).
+  **APScheduler** is the library that fires the weather/F1/milestone
+  channels on a cron-like schedule inside that same process.
+- **pytest** and **Vitest** are the Python and TypeScript test runners,
+  respectively — `pytest service/tests/` and `npm test`.
+
+What you need installed:
+
+- **Node.js 18 or newer** (this repo is built and tested on 22). Get it
+  from [nodejs.org](https://nodejs.org), or `brew install node` on
+  macOS if you use Homebrew.
+- **Python 3.11 or newer**. Get it from
+  [python.org](https://www.python.org/downloads/), or
+  `brew install python@3.11`.
+- **git**, to clone this repository, and a terminal to run commands in
+  (macOS: Terminal.app, iTerm, or VS Code's built-in terminal — see
+  "Testing locally in VS Code" below).
+
+Once those are installed, everything below assumes you're in a
+terminal with this repository as your current directory (`cd` into
+wherever you cloned it).
 
 ## Try it
 
@@ -59,7 +131,7 @@ python3 python/verify_parity.py       # cross-language charset check
 python3 -m venv .venv
 .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000   # the API + DB
-.venv/bin/python -m pytest service/tests/                        # 65 tests
+.venv/bin/python -m pytest service/tests/                        # 77 tests
 
 npm run dev                           # renderer at http://localhost:5173/display.html
 ```
@@ -69,6 +141,56 @@ devices on the LAN), open `http://<this machine's LAN IP>:8000/compose`
 from your phone and post a message; it shows up on the board within 5
 seconds. The Vite dev server only binds to localhost, so it's for
 renderer development on this machine, not phone access.
+
+**Send test messages from the terminal** instead of the phone form —
+run these with the service up and `http://localhost:5173/display.html`
+open in a browser, and watch the board flap over within 5 seconds:
+
+```bash
+# Plain message
+curl -X POST http://localhost:8000/message \
+  -H "Content-Type: application/json" \
+  -d '{"text": "HELLO FROM THE TERMINAL", "priority": 1}'
+
+# Pinned — preempts whatever's currently showing, even mid-dwell
+curl -X POST http://localhost:8000/message \
+  -H "Content-Type: application/json" \
+  -d '{"text": "PINNED TEST", "pinned": true}'
+
+# POST /compose/smart — tries the free heuristic template picker first
+# (see "The layout engine" below); falls back to a plain message if the
+# text doesn't match a recognized shape. These three each hit a
+# different template: countdown, stat, list.
+curl -X POST http://localhost:8000/compose/smart \
+  -H "Content-Type: application/json" \
+  -d '{"text": "5 days until vacation"}'
+curl -X POST http://localhost:8000/compose/smart \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Outside: 72F, feels chilly"}'
+curl -X POST http://localhost:8000/compose/smart \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Groceries: milk, eggs, bread"}'
+```
+
+**Inspect and manage what's queued:**
+
+```bash
+curl http://localhost:8000/queue          # everything queued: id, text, priority, pinned, page count
+curl http://localhost:8000/current        # exactly what's on the board right now, as raw cell codes
+curl -X POST http://localhost:8000/next   # force-advance instead of waiting out dwell_seconds
+curl -X DELETE http://localhost:8000/queue/3   # delete a test message by id (from /queue above)
+```
+
+**Reset to a clean slate** — the DB is a single gitignored file, so stop
+uvicorn, delete it, and restart; it's recreated automatically, reseeded
+with one low-priority "FLIPBOARD READY" message, same as a fresh clone:
+
+```bash
+rm service/flipboard.db
+```
+
+If a port is stuck or a server won't start, see **Troubleshooting**
+below.
 
 ## Testing locally in VS Code
 
@@ -134,6 +256,109 @@ The board should flap over to it within 5 seconds (the renderer's poll
 interval). If it doesn't, check the uvicorn terminal for errors first —
 most issues at this stage are the service not running or the wrong
 port, not the renderer.
+
+**5. Other things worth sending while testing:**
+
+```bash
+# Pin a message so it preempts whatever's currently showing
+curl -X POST http://localhost:8000/message \
+  -H "Content-Type: application/json" \
+  -d '{"text": "PINNED TEST", "pinned": true}'
+
+# POST /compose/smart — same shape as /message, but tries the free
+# heuristic template picker first (see "The layout engine" below).
+# These three exercise countdown / stat / list; anything that doesn't
+# match one of those shapes just falls back to a plain banner.
+curl -X POST http://localhost:8000/compose/smart \
+  -H "Content-Type: application/json" \
+  -d '{"text": "5 days until vacation"}'
+curl -X POST http://localhost:8000/compose/smart \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Outside: 72F, feels chilly"}'
+curl -X POST http://localhost:8000/compose/smart \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Groceries: milk, eggs, bread"}'
+
+# See everything queued (id, text, priority, pinned, page count)
+curl http://localhost:8000/queue
+
+# See exactly what's on the board right now, as raw cell codes
+curl http://localhost:8000/current
+
+# Force the board to advance to the next eligible message immediately,
+# instead of waiting out the current one's dwell_seconds
+curl -X POST http://localhost:8000/next
+
+# Delete a test message by id (from the /queue output above)
+curl -X DELETE http://localhost:8000/queue/3
+```
+
+**6. Reset to a clean slate.** The DB is a single gitignored file —
+stop uvicorn, delete it, restart:
+
+```bash
+rm service/flipboard.db
+```
+
+It's recreated on the next uvicorn startup, reseeded with one
+low-priority "FLIPBOARD READY" message, same as a fresh clone.
+
+## Troubleshooting
+
+**"Port 5173/8000 is in use" / a server won't start.** Something from
+an earlier run is still bound to the port — VS Code's integrated
+terminal is especially prone to leaving orphaned `node`/`uvicorn`
+processes behind after a window reload or a crashed debug session.
+Find and kill it:
+
+```bash
+lsof -i :5173 -sTCP:LISTEN        # or :8000 for the service
+# COMMAND   PID     USER   ...
+# node    12345 you        ...
+kill 12345                         # graceful; give it a second
+lsof -i :5173 -sTCP:LISTEN         # confirm the port is free
+```
+
+If it's still listed a couple seconds later (a hung process ignoring
+`SIGTERM` — this can happen to a stuck Vite dev server), force it:
+
+```bash
+kill -9 12345
+```
+
+Then start the server again as normal (`npm run dev` /
+`.venv/bin/uvicorn ...`).
+
+**The board isn't updating after I post a message.** Check three things
+in order: (1) is uvicorn actually running and did it log the POST
+without a traceback — a stuck/crashed service is the most common cause;
+(2) `curl http://localhost:8000/current` — does it show the id you just
+posted, or something else? If something else, the message you posted
+is real but lower-priority than what's already showing (check
+`/queue`, or `pinned: true` to preempt it, or `POST /next` to force it);
+(3) is the renderer tab actually open and pointed at
+`http://localhost:5173/display.html` — it polls every 5s, so give it a
+moment.
+
+**A message shows blank text in `/queue`.** Expected for anything that
+matched a `/compose/smart` template (countdown/stat/list) or came from
+a scheduled channel — those store a pre-built grid, not raw text, so
+there's nothing to echo back. The board itself is unaffected; decode
+the grid directly if you need to double-check what's on it:
+
+```bash
+.venv/bin/python3 -c "
+import sqlite3, json
+from service.compose import CHARSET, COLS, ROWS
+conn = sqlite3.connect('service/flipboard.db')
+conn.row_factory = sqlite3.Row
+for row in conn.execute('SELECT id, source, grid FROM messages ORDER BY id'):
+    grid = json.loads(row['grid'])
+    print(f\"--- id={row['id']} source={row['source']} ---\")
+    for r in range(ROWS):
+        print(repr(''.join(CHARSET.char_for(c) or ' ' for c in grid[r*COLS:(r+1)*COLS])))
+"
+```
 
 ## What the engine actually guarantees
 
@@ -266,8 +491,19 @@ goes blank rather than displaying something inappropriate at 2am. This
 also means a scheduled channel firing during quiet hours never gets a
 chance to post — `run_channel()` checks first and skips entirely.
 
+`POST /compose/smart` (build plan §11) takes free text and tries a free
+heuristic template picker (`service/compose/smart.py`) before falling
+back to a plain wrapped message — no Claude call, no API key, no cost.
+It recognizes countdown phrasing ("5 days until vacation"), label:value
+stats ("Outside: 72F, feels chilly"), and lists (comma- or newline-
+separated items); anything else falls straight through to the same path
+`POST /message` already uses, so it's never worse than `/message`, only
+sometimes better.
+
 ## Next
 
 calendar, mufc, and markets, once there's an ICS feed/API key/watchlist
-to build them against, plus the Claude `/compose/smart` endpoint. See
-the build plan, §11.
+to build them against. `/compose/smart` could later get an actual Claude
+call as a first-choice picker (per §11, "probe 7" — not yet run since it
+needs a paid `ANTHROPIC_API_KEY`), falling back to the heuristic version
+above rather than replacing it.
