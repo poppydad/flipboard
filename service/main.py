@@ -17,7 +17,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from . import db
-from .compose import BLANK_GRID, CHARSET_VERSION, render
+from .channels.scheduler import start_scheduler, stop_scheduler
+from .compose import BLANK_GRID, CHARSET_VERSION
+from .config import BRIGHTNESS_NORMAL, BRIGHTNESS_QUIET_FLOOR, is_quiet_hours
+from .messages import create_message
 from .selection import Selector
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -28,16 +31,12 @@ selector = Selector()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init_db()
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(title="flipboard", lifespan=lifespan)
-
-# A page that overflows the 6-row budget splits into linked messages (one
-# row per page — see service/compose/render.py) rather than truncating
-# silently. Each page's dwell is the requested total divided across pages,
-# with a floor so a long message with many pages doesn't flash unreadably.
-MIN_PAGE_DWELL_SECONDS = 20
 
 
 class MessageIn(BaseModel):
@@ -84,47 +83,34 @@ def get_current():
         cells = json.loads(row["grid"])
         message_id = row["id"]
 
+    quiet = is_quiet_hours()
     return {
         "id": message_id,
         "cells": cells,
         "charset_version": CHARSET_VERSION,
-        "sound_enabled": True,
-        "brightness": 1.0,
+        "sound_enabled": not quiet,
+        "brightness": BRIGHTNESS_QUIET_FLOOR if quiet else BRIGHTNESS_NORMAL,
     }
 
 
 @app.post("/message", response_model=MessageOut)
 def post_message(msg: MessageIn):
-    grids = render(msg.text)
-    page_dwell = max(MIN_PAGE_DWELL_SECONDS, msg.dwell_seconds // len(grids))
-    starts_at = msg.starts_at.timestamp() if msg.starts_at else None
-    expires_at = msg.expires_at.timestamp() if msg.expires_at else None
-
     conn = db.get_connection()
     try:
-        first_id: int | None = None
-        for grid in grids:
-            cur = conn.execute(
-                "INSERT INTO messages "
-                "(source, raw_text, grid, priority, dwell_seconds, starts_at, expires_at, pinned) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    "manual",
-                    msg.text,
-                    json.dumps(grid),
-                    msg.priority,
-                    page_dwell,
-                    starts_at,
-                    expires_at,
-                    int(msg.pinned),
-                ),
-            )
-            first_id = first_id if first_id is not None else cur.lastrowid
-        conn.commit()
-        row = conn.execute("SELECT * FROM messages WHERE id = ?", (first_id,)).fetchone()
+        ids = create_message(
+            conn,
+            source="manual",
+            text=msg.text,
+            priority=msg.priority,
+            dwell_seconds=msg.dwell_seconds,
+            starts_at=msg.starts_at.timestamp() if msg.starts_at else None,
+            expires_at=msg.expires_at.timestamp() if msg.expires_at else None,
+            pinned=msg.pinned,
+        )
+        row = conn.execute("SELECT * FROM messages WHERE id = ?", (ids[0],)).fetchone()
     finally:
         conn.close()
-    return _row_to_out(row, pages=len(grids))
+    return _row_to_out(row, pages=len(ids))
 
 
 @app.get("/queue", response_model=list[MessageOut])

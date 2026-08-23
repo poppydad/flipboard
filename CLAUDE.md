@@ -8,7 +8,7 @@ it has the phase breakdown, the bill of materials, and the risk table.
 
 **Phase 0 (charset spec), Phase 1A (headless engine), Phase 1B (canvas
 renderer), Phase 2 (service + phone posting), and Phase 3 (layout engine)
-are done and green.**
+are done and green. Phase 4 is partially done — see below.**
 
 ```
 npm install
@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 31/31 passing
+.venv/bin/python -m pytest service/tests/   # 47/47 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -169,14 +169,73 @@ service/compose/          Replaces Phase 2's service/compose.py wholesale.
   submodule under `service/` can `from charset import Charset` without
   repeating the path hack Phase 2's `compose.py` used to do inline.
 
+## What Phase 4 actually built (infrastructure only — see below)
+
+**Scope was deliberately narrowed.** The full phase is 6 channels
+(weather, calendar, f1, mufc, markets, milestone) plus a Claude
+`/compose/smart` endpoint, and every single one of those needs something
+this session doesn't have: a weather API key + location, calendar OAuth,
+a football/F1 data source, a stock watchlist, or a personal reference
+date for milestone. Asked the user how to scope it; they chose
+infrastructure-only. **No channels exist yet** — `CHANNELS` in
+`service/channels/__init__.py` is an empty list. What's built is the
+machinery that real channels will plug into:
+
+```
+service/
+  config.py              is_quiet_hours() — placeholder 21:00-07:00 window
+                         and brightness floor, needs real tuning
+  messages.py             create_message() — extracted from main.py's old
+                         inline insert code so POST /message and channels
+                         share one pagination/dwell-split path
+  channels/
+    base.py                Channel (name, cron, run) / ChannelMessage
+    __init__.py             CHANNELS registry — empty, ready for weather.py etc.
+    scheduler.py            run_channel(): quiet-hours gate, catches a
+                          channel's own exceptions so one bad channel
+                          can't take down the scheduler. start_scheduler()/
+                          stop_scheduler() wired into main.py's FastAPI
+                          lifespan (AsyncIOScheduler — needs a running
+                          event loop, which is why it's started there and
+                          not in a standalone script)
+```
+
+- **Quiet hours narrows *selection*, not just the wire fields.**
+  `sound_enabled`/`brightness` in `GET /current` already flip correctly,
+  but the real behavior is in `selection.py`: `_eligible()` now takes a
+  `quiet` flag and excludes every non-pinned message when it's set. This
+  means quiet hours interrupts a message that's already mid-dwell the
+  *instant* it begins (verified with a test using a toggleable
+  monkeypatched flag, not just "starts a new dwell period already
+  filtered") — not just for future reselections. A pinned message is the
+  only thing that still shows; if nothing's pinned, `GET /current` goes
+  blank rather than showing something inappropriate.
+- **This surfaced a real test-suite bug, not just app logic.** Every
+  existing `test_selection.py` test broke the moment `is_quiet_hours()`
+  started being called for real, because it was actually quiet hours
+  (past 9pm) when the tests ran and `is_quiet_hours()` reads real
+  wall-clock time by default. Fixed with an autouse fixture
+  (`not_quiet_hours`) that monkeypatches it to `False` for every test
+  except the dedicated quiet-hours ones — the same "don't let wall-clock
+  time make tests flaky" discipline the engine's injected-clock tests
+  already established, just newly relevant here.
+- **`AsyncIOScheduler.start()` requires a running event loop** — a
+  standalone `python -c "..."` script can't call it directly; verifying
+  the scheduler wiring needed `asyncio.run(...)`, same as it naturally
+  gets from uvicorn's loop via the FastAPI lifespan in production.
+
 ## Constraints that shouldn't move
 
 - LAN only, no auth — it's a hallway board, not a product.
 - SQLite, not Postgres — single-digit writes a day. `service/flipboard.db`
   is gitignored; each environment gets its own.
 - IPS/VA target display, never OLED — static grid, burn-in risk.
-- Quiet hours matter — there's an infant in the house. Sound and brightness
-  both need a hard off-switch, not just a dim setting. `BoardAudio.setGain(0)`
-  is that switch on the renderer side; `sound_enabled` in `GET /current` is
-  the wire format for it, but nothing schedules quiet hours yet — that's
-  Phase 4.
+- Quiet hours matter — there's an infant in the house. Sound and
+  brightness both need a hard off-switch, not just a dim setting.
+  `BoardAudio.setGain(0)` is that switch on the renderer side;
+  `sound_enabled`/`brightness` in `GET /current` (driven by
+  `service/config.py`'s `is_quiet_hours()`) is the wire format for it —
+  this is now wired end to end, but the window (21:00-07:00) and the
+  dim-vs-off choice (currently off, `BRIGHTNESS_QUIET_FLOOR = 0.0`) are
+  both placeholders pending the real household schedule and build plan
+  probe 6 (never run against actual hardware in this repo).

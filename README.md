@@ -1,7 +1,9 @@
 # flipboard
 
 Self-hosted split-flap message board. See `flipboard-build-plan-v2.md` for the
-full plan — this repo currently covers **Phase 0** through **Phase 3**.
+full plan — this repo covers **Phase 0** through **Phase 3**, plus the
+scheduler/quiet-hours infrastructure from **Phase 4** (no actual channels
+yet — see "Channels and quiet hours" below).
 
 ## What's here
 
@@ -30,8 +32,11 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   compose/                 The layout engine — normalize/wrap/align/render/
                            templates. See "The layout engine" below.
   selection.py             Deterministic pick: pinned > priority > least-recently-shown
+  config.py                is_quiet_hours() — see "Channels and quiet hours"
+  messages.py              create_message(): shared by POST /message and channels
+  channels/                Scheduler + plugin interface, no channels built yet
   web/compose.html         Phone-friendly posting form, no framework
-  tests/                   31 pytest tests
+  tests/                   47 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -54,7 +59,7 @@ python3 python/verify_parity.py       # cross-language charset check
 python3 -m venv .venv
 .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000   # the API + DB
-.venv/bin/python -m pytest service/tests/                        # 31 tests
+.venv/bin/python -m pytest service/tests/                        # 47 tests
 
 npm run dev                           # renderer at http://localhost:5173/display.html
 ```
@@ -226,7 +231,30 @@ no special-casing required.
 - **templates** — `banner`, `stat`, `list`, `countdown`, `chips` (a solid
   color-chip border framing centered text).
 
-## Next: Phase 4
+## Channels and quiet hours
 
-Channels (weather, calendar, F1, MUFC, markets, milestone) and optional
-Claude-composed messages. See the build plan, §11.
+The scheduler and channel plugin interface exist (`service/channels/`),
+but `CHANNELS` is an empty list — no actual channel (weather, calendar,
+F1, MUFC, markets, milestone) is built yet. Each one needs something
+this repo doesn't have on its own: a weather API key and location,
+calendar OAuth, a sports data source, a stock watchlist, or a personal
+reference date. A channel is small once those exist — a `Channel(name,
+cron, run)` where `run()` returns a `ChannelMessage(text=...)` or
+`ChannelMessage(grid=<a template call>)`, appended to `CHANNELS`; the
+scheduler (APScheduler, in-process) handles the rest.
+
+Quiet hours *is* live, though, independent of any channel existing:
+`service/config.py`'s `is_quiet_hours()` (placeholder 21:00–07:00
+window — tune it to the household's real schedule) does two things —
+`GET /current` reports `sound_enabled: false` and `brightness: 0.0`
+during quiet hours, and `selection.py` excludes every non-pinned message
+from consideration, so only a pinned message can show and the board
+goes blank rather than displaying something inappropriate at 2am. This
+also means a scheduled channel firing during quiet hours never gets a
+chance to post — `run_channel()` checks first and skips entirely.
+
+## Next
+
+The channels themselves, once there's a location/API keys/calendar
+access/watchlist/reference dates to build them against, plus the Claude
+`/compose/smart` endpoint. See the build plan, §11.

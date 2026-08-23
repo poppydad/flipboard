@@ -4,7 +4,6 @@ Schema per build plan §9.
 """
 from __future__ import annotations
 
-import json
 import sqlite3
 from pathlib import Path
 
@@ -54,12 +53,6 @@ def _seed_default(conn: sqlite3.Connection) -> None:
     if row["n"] > 0:
         return
 
-    from .compose import render
+    from .messages import create_message
 
-    text = "FLIPBOARD READY"
-    conn.execute(
-        "INSERT INTO messages (source, raw_text, grid, priority, dwell_seconds, pinned) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        ("system", text, json.dumps(render(text)[0]), 90, 300, 0),
-    )
-    conn.commit()
+    create_message(conn, source="system", text="FLIPBOARD READY", priority=90, dwell_seconds=300)

@@ -16,6 +16,15 @@ def conn():
     c.close()
 
 
+@pytest.fixture(autouse=True)
+def not_quiet_hours(monkeypatch):
+    # Tests must not depend on what time it actually is when they run —
+    # is_quiet_hours() is real wall-clock by default, and every test below
+    # is about priority/dwell/pinned logic, not quiet hours. The dedicated
+    # quiet-hours tests further down override this back to True themselves.
+    monkeypatch.setattr("service.selection.is_quiet_hours", lambda: False)
+
+
 def insert(conn, *, priority=50, dwell_seconds=300, pinned=False, starts_at=None, expires_at=None, text="X"):
     cur = conn.execute(
         "INSERT INTO messages (source, raw_text, grid, priority, dwell_seconds, starts_at, expires_at, pinned) "
@@ -154,3 +163,48 @@ def test_force_bypasses_dwell_hold(conn, monkeypatch):
 def test_no_eligible_messages_returns_none(conn):
     selector = Selector()
     assert selector.current(conn) is None
+
+
+# --- quiet hours -----------------------------------------------------------
+
+
+def test_quiet_hours_excludes_non_pinned_even_at_top_priority(conn, monkeypatch):
+    monkeypatch.setattr("service.selection.is_quiet_hours", lambda: True)
+    insert(conn, priority=0)  # would win any time other than quiet hours
+    selector = Selector()
+    assert selector.current(conn) is None
+
+
+def test_quiet_hours_still_shows_a_pinned_message(conn, monkeypatch):
+    monkeypatch.setattr("service.selection.is_quiet_hours", lambda: True)
+    insert(conn, priority=0)  # non-pinned, ignored during quiet hours
+    pinned_id = insert(conn, priority=99, pinned=True)
+    selector = Selector()
+    row = selector.current(conn)
+    assert row["id"] == pinned_id
+
+
+def test_quiet_hours_onset_interrupts_an_already_showing_non_pinned_message(conn, monkeypatch):
+    quiet = {"now": False}
+    monkeypatch.setattr("service.selection.is_quiet_hours", lambda: quiet["now"])
+
+    held = insert(conn, priority=50, dwell_seconds=300)
+    selector = Selector()
+    first = selector.current(conn)
+    assert first["id"] == held
+
+    quiet["now"] = True  # quiet hours begins mid-dwell
+    assert selector.current(conn) is None  # goes blank, doesn't keep showing it
+
+
+def test_quiet_hours_ending_reopens_non_pinned_candidates(conn, monkeypatch):
+    quiet = {"now": True}
+    monkeypatch.setattr("service.selection.is_quiet_hours", lambda: quiet["now"])
+
+    normal_id = insert(conn, priority=10)
+    selector = Selector()
+    assert selector.current(conn) is None  # quiet hours, nothing pinned
+
+    quiet["now"] = False  # the morning set — quiet hours ends
+    row = selector.current(conn)
+    assert row["id"] == normal_id
