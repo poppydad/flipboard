@@ -43,7 +43,7 @@ class Selector:
             return None
 
         self._current = _Pick(message_id=picked["id"], selected_at=now)
-        conn.execute("INSERT INTO display_log (message_id) VALUES (?)", (picked["id"],))
+        conn.execute("INSERT INTO display_log (message_id, shown_at) VALUES (?, ?)", (picked["id"], now))
         conn.commit()
         return picked
 
@@ -75,7 +75,10 @@ class Selector:
         pinned = [r for r in candidates if r["pinned"]]
         pool = pinned if pinned else candidates
 
-        # last_shown is a SQLite CURRENT_TIMESTAMP string (or NULL for "never") —
-        # lexicographic order matches chronological order, and NULL/"" sorts first.
-        pool.sort(key=lambda r: (r["priority"], r["last_shown"] or ""))
+        # last_shown is an epoch float (or NULL for "never shown") — an explicit
+        # Python-side timestamp, not SQLite's CURRENT_TIMESTAMP, which only has
+        # 1-second resolution and made rapid reselections (e.g. paginated
+        # messages cycling via /next) tie and silently favor the lower id.
+        never_shown = -1.0
+        pool.sort(key=lambda r: (r["priority"], r["last_shown"] if r["last_shown"] is not None else never_shown))
         return pool[0]

@@ -7,7 +7,8 @@ it has the phase breakdown, the bill of materials, and the risk table.
 ## Where things stand
 
 **Phase 0 (charset spec), Phase 1A (headless engine), Phase 1B (canvas
-renderer), and Phase 2 (service + phone posting) are done and green.**
+renderer), Phase 2 (service + phone posting), and Phase 3 (layout engine)
+are done and green.**
 
 ```
 npm install
@@ -19,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 14/14 passing
+.venv/bin/python -m pytest service/tests/   # 31/31 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -29,7 +30,7 @@ The renderer (`renderer/`) was built and visually verified step by step per
 split line → audio — each stage checked in a real browser before moving on.
 The service (`service/`) is verified against the renderer end-to-end (Vite
 proxies `/current`, `/message`, `/queue`, `/next`, `/compose` to :8000 in
-dev) and has its own pytest suite for the two files with real logic.
+dev) and has its own pytest suite for the files with real logic.
 
 ## Architecture decisions already made (don't relitigate these)
 
@@ -102,19 +103,17 @@ service/
   main.py          FastAPI app: GET /current, POST /message, GET /queue,
                     DELETE /queue/{id}, POST /next, GET /compose
   db.py             SQLite schema (messages, display_log) + connection helper
-  compose.py        text -> 6x22 grid: uppercase, drop illegal chars, word-wrap,
-                    center both axes. Deliberately minimal — see the docstring,
-                    Phase 3's layout engine replaces this wholesale, don't grow it
   selection.py       Selector: pinned wins, else lowest priority, ties to
                     least-recently-shown, holds dwell_seconds before reselecting
   web/compose.html   phone-friendly form, no framework, fetch() POSTs JSON
   requirements.txt / requirements-dev.txt
   flipboard.service  sample systemd unit — untested here (macOS dev box);
                     verify the restart-survives-power-cycle claim on the Pi
-  tests/             pytest, 14 tests: compose wrap/center/drop, selection
-                    priority/pinned/dwell/tie-break, all against real sqlite3
-                    (:memory:) or a deterministic monkeypatched clock — same
-                    "no hidden magic" spirit as the engine's injected-clock tests
+  tests/             pytest, 31 tests — see "What Phase 3 actually built"
+                    for the compose-engine ones; selection tests use real
+                    sqlite3 (:memory:) or a deterministic monkeypatched
+                    clock, same "no hidden magic" spirit as the engine's
+                    injected-clock tests
 ```
 
 - **Selection is stateful but simple**: `Selector` holds one in-memory
@@ -124,16 +123,51 @@ service/
   priority, until the dwell elapses or `/next` forces it. This was a real
   bug caught by hand-testing with curl before it got fixed — see
   `_pinned_waiting` in `selection.py`.
-- **`starts_at`/`expires_at` are stored as epoch floats**, not SQLite's
-  `CURRENT_TIMESTAMP` string format — the two are never compared to each
-  other, only `display_log.shown_at` (a string) is used for the
-  least-recently-shown tie-break, where lexicographic order already
-  matches chronological order.
+- **`starts_at`, `expires_at`, and `display_log.shown_at` are all epoch
+  floats** — not SQLite's `CURRENT_TIMESTAMP` string format, which only
+  has 1-second resolution. `shown_at` used to use that default and it was
+  a real bug: rapid reselections (paginated pages cycling via `/next`)
+  landed in the same second, tied on the least-recently-shown sort, and
+  silently favored the lower id instead of alternating. Caught live with
+  curl while testing Phase 3 pagination, fixed by passing `time.time()`
+  explicitly on insert — see the regression test in `test_selection.py`
+  with a monkeypatched sub-second clock.
 - **No auth, CORS, or reverse proxy needed** — the Vite dev server proxies
   API routes to :8000 so the renderer and service are same-origin in dev,
   matching how they'd be served together in production.
 - First run seeds one low-priority "FLIPBOARD READY" message so
   `GET /current` never has to special-case an empty board.
+
+## What Phase 3 actually built
+
+```
+service/compose/          Replaces Phase 2's service/compose.py wholesale.
+  charset.py                Reuses python/charset.py — not a third loader.
+  normalize.py               Text -> legal codes: uppercase, drop illegal
+                             chars, collapse whitespace runs, emoji -> chip,
+                             \n -> NEWLINE sentinel (internal only)
+  wrap.py                    Word-wrap over code lists, not strings — a
+                             color chip wraps exactly like a letter
+  align.py                   Center both axes; floor-division padding
+                             gives top/left bias on odd leftover for free
+  render.py                  normalize -> wrap -> align, paginates >6 lines
+                             into multiple grids instead of truncating
+  templates.py               banner / stat / list / countdown / chips
+```
+
+- **Operates on code lists end to end, never strings mid-pipeline** — the
+  engine's whole "cells are integer codes" philosophy extended into the
+  composer. This is what makes chips wrap identically to letters with no
+  special-casing.
+- **Multi-page overflow needed no schema change.** `service/main.py`'s
+  `POST /message` calls `render()` and inserts one `messages` row per
+  page (same `raw_text` on each, `dwell_seconds` divided across pages
+  with a 20s floor). The existing least-recently-shown tie-break in
+  `selection.py` naturally cycles them in order forever — no new
+  "which page is next" state needed anywhere.
+- **`service/__init__.py` puts `python/` on `sys.path` once**, so every
+  submodule under `service/` can `from charset import Charset` without
+  repeating the path hack Phase 2's `compose.py` used to do inline.
 
 ## Constraints that shouldn't move
 

@@ -1,8 +1,7 @@
 # flipboard
 
 Self-hosted split-flap message board. See `flipboard-build-plan-v2.md` for the
-full plan — this repo currently covers **Phase 0**, **Phase 1A**, **Phase 1B**,
-and **Phase 2**.
+full plan — this repo currently covers **Phase 0** through **Phase 3**.
 
 ## What's here
 
@@ -28,10 +27,11 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   main.py                  GET /current, POST /message, GET /queue,
                            DELETE /queue/{id}, POST /next, GET /compose
   db.py                    SQLite schema (messages, display_log)
-  compose.py               Minimal text -> 6x22 grid (placeholder for Phase 3)
+  compose/                 The layout engine — normalize/wrap/align/render/
+                           templates. See "The layout engine" below.
   selection.py             Deterministic pick: pinned > priority > least-recently-shown
   web/compose.html         Phone-friendly posting form, no framework
-  tests/                   14 pytest tests
+  tests/                   31 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -54,7 +54,7 @@ python3 python/verify_parity.py       # cross-language charset check
 python3 -m venv .venv
 .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000   # the API + DB
-.venv/bin/python -m pytest service/tests/                        # 14 tests
+.venv/bin/python -m pytest service/tests/                        # 31 tests
 
 npm run dev                           # renderer at http://localhost:5173/display.html
 ```
@@ -122,10 +122,7 @@ they'd be served together in production.
 
 ## The service
 
-FastAPI + SQLite, no auth, no reverse proxy assumed. `compose.py` turns
-posted text into a grid (uppercase, drop illegal characters, word-wrap,
-center) — deliberately minimal; it's a stand-in for Phase 3's real layout
-engine, not an attempt at it.
+FastAPI + SQLite, no auth, no reverse proxy assumed.
 
 Selection (`selection.py`) is one deterministic rule: a pinned, eligible
 message always wins and preempts immediately, even mid-dwell; otherwise
@@ -138,8 +135,33 @@ ago (or never). Once picked, a message holds the display for its
 Shortcut ("Post to Board" → Ask for Text → POST `/message`) or any
 browser on the LAN hits from a phone.
 
-## Next: Phase 3
+A message that overflows 6 rows doesn't truncate — `POST /message` calls
+the layout engine's `render()`, gets back multiple pages, and inserts one
+`messages` row per page with `dwell_seconds` divided across them (floor
+20s each). No schema change needed: the existing least-recently-shown
+tie-break naturally cycles same-priority rows in sequence forever, which
+is exactly "linked pages" behavior for free.
 
-The real layout engine (word wrap, alignment, templates) in
-`compose/`, replacing `service/compose.py` wholesale. See the build
-plan, §10.
+## The layout engine
+
+`service/compose/` (build plan §10) turns arbitrary text into one or more
+6×22 grids, operating on charset codes the whole way through — never
+strings mid-pipeline — so a color chip word-wraps exactly like a letter,
+no special-casing required.
+
+- **normalize** — uppercase, collapse whitespace runs, drop illegal
+  characters outright (no placeholder box), map a small set of emoji to
+  the nearest color chip, treat explicit `\n` as a forced line break.
+- **wrap** — never breaks mid-word unless the word itself exceeds 22
+  columns (then hard-breaks, no hyphen).
+- **align** — centers both axes; on an odd leftover, floor-division
+  padding biases the content toward the top-left automatically.
+- **render** — orchestrates the above and paginates content over 6 lines
+  into multiple linked grids instead of dropping it.
+- **templates** — `banner`, `stat`, `list`, `countdown`, `chips` (a solid
+  color-chip border framing centered text).
+
+## Next: Phase 4
+
+Channels (weather, calendar, F1, MUFC, markets, milestone) and optional
+Claude-composed messages. See the build plan, §11.

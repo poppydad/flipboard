@@ -42,6 +42,29 @@ def test_pinned_beats_lower_priority_number(conn):
     assert row["id"] == pinned_id
 
 
+def test_rapid_reselection_within_one_wall_clock_second_still_alternates(conn, monkeypatch):
+    # Regression: shown_at used to default to SQLite's CURRENT_TIMESTAMP,
+    # which only has 1-second resolution. Forced reselections faster than
+    # that (e.g. a paginated message's pages cycling via /next) collided
+    # on the same shown_at string and the tie-break silently fell back to
+    # row order, getting stuck favoring the lower id forever. shown_at is
+    # now an explicit Python epoch float instead — this proves sub-second
+    # calls still alternate correctly.
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("service.selection.time.time", lambda: clock["t"])
+
+    a = insert(conn, priority=10, dwell_seconds=0)
+    b = insert(conn, priority=10, dwell_seconds=0)
+    selector = Selector()
+
+    picks = []
+    for _ in range(4):
+        clock["t"] += 0.01  # sub-second — well within CURRENT_TIMESTAMP's dead zone
+        picks.append(selector.current(conn, force=True)["id"])
+
+    assert picks == [a, b, a, b]  # clean alternation, never stuck on one id
+
+
 def test_ties_broken_by_least_recently_shown(conn):
     a = insert(conn, priority=10, dwell_seconds=0)
     b = insert(conn, priority=10, dwell_seconds=0)

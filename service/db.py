@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS display_log (
   id INTEGER PRIMARY KEY,
   message_id INTEGER REFERENCES messages(id),
-  shown_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  shown_at REAL NOT NULL
 );
 """
 
@@ -54,12 +54,12 @@ def _seed_default(conn: sqlite3.Connection) -> None:
     if row["n"] > 0:
         return
 
-    from .compose import text_to_grid
+    from .compose import render
 
     text = "FLIPBOARD READY"
     conn.execute(
         "INSERT INTO messages (source, raw_text, grid, priority, dwell_seconds, pinned) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        ("system", text, json.dumps(text_to_grid(text)), 90, 300, 0),
+        ("system", text, json.dumps(render(text)[0]), 90, 300, 0),
     )
     conn.commit()
