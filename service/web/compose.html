@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Post to Board</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    max-width: 480px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    background: #111;
+    color: #eee;
+  }
+  h2 { font-weight: 600; }
+  textarea {
+    width: 100%;
+    font-size: 1.1rem;
+    padding: 0.75rem;
+    box-sizing: border-box;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #1c1c1c;
+    color: #eee;
+    resize: vertical;
+  }
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: #bbb;
+  }
+  button {
+    width: 100%;
+    padding: 0.9rem;
+    font-size: 1.1rem;
+    margin-top: 1rem;
+    border-radius: 8px;
+    border: none;
+    background: #e8e4d8;
+    color: #111;
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.6; }
+  #status { margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <h2>Post to Board</h2>
+  <form id="composeForm">
+    <textarea name="text" rows="3" maxlength="132" placeholder="What should the board say?" required></textarea>
+    <label><input type="checkbox" name="pinned" /> Pin — show now, stay until unpinned</label>
+    <button type="submit">Send</button>
+  </form>
+  <div id="status"></div>
+  <script>
+    document.getElementById("composeForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      const button = form.querySelector("button");
+      const status = document.getElementById("status");
+
+      button.disabled = true;
+      status.textContent = "Sending…";
+      try {
+        const res = await fetch("/message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: form.text.value,
+            pinned: form.pinned.checked,
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        status.textContent = "Sent.";
+        form.reset();
+      } catch (err) {
+        status.textContent = "Failed: " + err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

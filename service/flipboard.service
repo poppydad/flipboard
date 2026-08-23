@@ -1,0 +1,22 @@
+# Sample systemd unit for the Pi deployment. Not installed by anything —
+# copy to /etc/systemd/system/flipboard.service, adjust paths/user, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now flipboard
+#
+# Untested here (this is a macOS dev machine); verify the restart-survives
+# claim from build plan §9 ("Done when... the service restarts cleanly
+# under systemd") on the actual Pi before relying on it.
+
+[Unit]
+Description=flipboard service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/flipboard
+ExecStart=/home/pi/flipboard/.venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

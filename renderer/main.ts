@@ -6,7 +6,7 @@ import { enableKiosk } from "./kiosk.js";
 const ROWS = 6;
 const COLS = 22;
 const FLAP_MS = 28;
-const POLL_URL = "/current.json";
+const POLL_URL = "/current";
 const POLL_INTERVAL_MS = 5000;
 
 const charset = Charset.load();
@@ -54,32 +54,39 @@ function frame(now: number): void {
 }
 requestAnimationFrame(frame);
 
-function textToGrid(cs: Charset, text: string): number[] {
-  const upper = text.toUpperCase().slice(0, ROWS * COLS);
-  const codes: number[] = [];
-  for (const ch of upper) codes.push(cs.codeFor(ch) ?? cs.blankCode);
-  while (codes.length < ROWS * COLS) codes.push(cs.blankCode);
-  return codes;
-}
-
 interface CurrentPayload {
-  text?: string;
-  grid?: number[];
+  id: number | null;
+  cells: number[];
+  charset_version: number;
+  sound_enabled: boolean;
+  brightness: number;
 }
 
-// No backend yet (that's Phase 2) — poll a static JSON file instead of GET /current.
+let warnedVersionMismatch = false;
+
 async function poll(): Promise<void> {
   try {
     const res = await fetch(POLL_URL, { cache: "no-store" });
     if (!res.ok) return;
     const data = (await res.json()) as CurrentPayload;
-    if (data.grid) {
-      board.setTarget(data.grid);
-    } else if (data.text) {
-      board.setTarget(textToGrid(charset, data.text));
+
+    // Refuse a payload built against a charset we don't agree with — showing
+    // wrong letters is worse than showing stale ones.
+    if (data.charset_version !== charset.version) {
+      if (!warnedVersionMismatch) {
+        console.warn(
+          `charset_version mismatch: renderer has ${charset.version}, service sent ${data.charset_version}. Ignoring payload.`
+        );
+        warnedVersionMismatch = true;
+      }
+      return;
     }
+    warnedVersionMismatch = false;
+
+    board.setTarget(data.cells);
+    audio.setGain(data.sound_enabled ? 1 : 0);
   } catch {
-    // LAN board, no server yet — a failed fetch just means "nothing changed."
+    // LAN board, service may not be up yet — a failed fetch just means "nothing changed."
   }
 }
 poll();

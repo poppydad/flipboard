@@ -6,8 +6,8 @@ it has the phase breakdown, the bill of materials, and the risk table.
 
 ## Where things stand
 
-**Phase 0 (charset spec), Phase 1A (headless engine), and Phase 1B (canvas
-renderer) are done and green.**
+**Phase 0 (charset spec), Phase 1A (headless engine), Phase 1B (canvas
+renderer), and Phase 2 (service + phone posting) are done and green.**
 
 ```
 npm install
@@ -16,6 +16,10 @@ npm run sim -- "HELLO WORLD"      # CLI sim: flap counts + settle time
 python3 python/verify_parity.py   # TS/Python charset agreement check
 npm run typecheck                 # engine + cli + renderer, clean
 npm run dev                       # Vite dev server, open /display.html
+
+python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
+.venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
+.venv/bin/python -m pytest service/tests/   # 14/14 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -23,6 +27,9 @@ tested, and typechecked. Do not rewrite `engine/` from scratch; extend it.
 The renderer (`renderer/`) was built and visually verified step by step per
 §4 of the plan — flat tiles → tick loop → folding leaf → fold shadow →
 split line → audio — each stage checked in a real browser before moving on.
+The service (`service/`) is verified against the renderer end-to-end (Vite
+proxies `/current`, `/message`, `/queue`, `/next`, `/compose` to :8000 in
+dev) and has its own pytest suite for the two files with real logic.
 
 ## Architecture decisions already made (don't relitigate these)
 
@@ -81,17 +88,61 @@ vite.config.ts    root: "renderer", npm run dev serves it at :5173
 - **`BoardAudio.setGain(0)` is already a hard off-switch**, not a dim —
   satisfies the quiet-hours constraint below. Nothing wires it to a
   schedule yet; that's Phase 2 (`sound_enabled` from the service).
-- Poll loop hits `/current.json` (Vite's `renderer/public/`) every 5s,
-  same shape `GET /current` will return in Phase 2 (`{text}` or `{grid}`).
-  A grid identical to what's already showing is a no-op for free — cells
-  already at target produce zero flap events.
+- Poll loop hits real `GET /current` every 5s and checks `charset_version`
+  against the renderer's own before applying — a mismatched payload is
+  ignored (console warning, not a crash), per §4's "refuse a payload it
+  can't correctly display" line. A grid identical to what's already
+  showing is a no-op for free — cells already at target produce zero
+  flap events.
+
+## What Phase 2 actually built
+
+```
+service/
+  main.py          FastAPI app: GET /current, POST /message, GET /queue,
+                    DELETE /queue/{id}, POST /next, GET /compose
+  db.py             SQLite schema (messages, display_log) + connection helper
+  compose.py        text -> 6x22 grid: uppercase, drop illegal chars, word-wrap,
+                    center both axes. Deliberately minimal — see the docstring,
+                    Phase 3's layout engine replaces this wholesale, don't grow it
+  selection.py       Selector: pinned wins, else lowest priority, ties to
+                    least-recently-shown, holds dwell_seconds before reselecting
+  web/compose.html   phone-friendly form, no framework, fetch() POSTs JSON
+  requirements.txt / requirements-dev.txt
+  flipboard.service  sample systemd unit — untested here (macOS dev box);
+                    verify the restart-survives-power-cycle claim on the Pi
+  tests/             pytest, 14 tests: compose wrap/center/drop, selection
+                    priority/pinned/dwell/tie-break, all against real sqlite3
+                    (:memory:) or a deterministic monkeypatched clock — same
+                    "no hidden magic" spirit as the engine's injected-clock tests
+```
+
+- **Selection is stateful but simple**: `Selector` holds one in-memory
+  `_current` pick. A pinned message preempts an in-progress dwell hold
+  immediately (that's what "Pin — show now" in compose.html promises); a
+  non-pinned message arriving mid-dwell does not, regardless of its
+  priority, until the dwell elapses or `/next` forces it. This was a real
+  bug caught by hand-testing with curl before it got fixed — see
+  `_pinned_waiting` in `selection.py`.
+- **`starts_at`/`expires_at` are stored as epoch floats**, not SQLite's
+  `CURRENT_TIMESTAMP` string format — the two are never compared to each
+  other, only `display_log.shown_at` (a string) is used for the
+  least-recently-shown tie-break, where lexicographic order already
+  matches chronological order.
+- **No auth, CORS, or reverse proxy needed** — the Vite dev server proxies
+  API routes to :8000 so the renderer and service are same-origin in dev,
+  matching how they'd be served together in production.
+- First run seeds one low-priority "FLIPBOARD READY" message so
+  `GET /current` never has to special-case an empty board.
 
 ## Constraints that shouldn't move
 
 - LAN only, no auth — it's a hallway board, not a product.
-- SQLite, not Postgres — single-digit writes a day (this matters for Phase 2,
-  not yet relevant to the renderer).
+- SQLite, not Postgres — single-digit writes a day. `service/flipboard.db`
+  is gitignored; each environment gets its own.
 - IPS/VA target display, never OLED — static grid, burn-in risk.
 - Quiet hours matter — there's an infant in the house. Sound and brightness
-  both need a hard off-switch, not just a dim setting. Not renderer work yet,
-  but keep the audio engine's gain control easy to zero out from outside.
+  both need a hard off-switch, not just a dim setting. `BoardAudio.setGain(0)`
+  is that switch on the renderer side; `sound_enabled` in `GET /current` is
+  the wire format for it, but nothing schedules quiet hours yet — that's
+  Phase 4.
