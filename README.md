@@ -65,6 +65,71 @@ from your phone and post a message; it shows up on the board within 5
 seconds. The Vite dev server only binds to localhost, so it's for
 renderer development on this machine, not phone access.
 
+## Testing locally in VS Code
+
+The repo ships `.vscode/settings.json`, `launch.json`, and
+`extensions.json`, so most of this is just opening the folder — VS Code
+will prompt to install the recommended extensions (Python, Pylance,
+Vitest) on first open.
+
+**1. Set up once:**
+
+```bash
+npm install
+python3 -m venv .venv
+.venv/bin/pip install -r service/requirements-dev.txt
+```
+
+Then run **Python: Select Interpreter** from the Command Palette
+(`Cmd+Shift+P`) and pick `./.venv/bin/python` if it isn't already
+selected — `settings.json` points at it by default, but VS Code
+sometimes needs a nudge the first time a venv is created.
+
+**2. Run both halves side by side.** Split the integrated terminal
+(the split-pane icon in the terminal panel, or `` Cmd+\ ``) and run one
+in each half:
+
+```bash
+npm run dev                                                     # left: renderer, :5173
+.venv/bin/uvicorn service.main:app --reload --host 0.0.0.0 --port 8000   # right: service, :8000
+```
+
+`--reload` restarts the service automatically on file changes — worth
+using here even though the "Try it" command above omits it. Cmd-click
+the `http://localhost:5173` link either terminal prints to open it in
+your default browser; the renderer needs a real `<canvas>` and doesn't
+render in VS Code's Simple Browser.
+
+Prefer the debugger to breakpoint into the service? Use the **Run and
+Debug** panel (`Cmd+Shift+D`) and pick **"Service: uvicorn (debug,
+auto-reload)"** instead of the terminal command above — same effect,
+plus breakpoints.
+
+**3. Run the tests from the Testing sidebar** (`Cmd+Shift+P` →
+`Testing: Focus on Test Explorer View`, or the flask icon in the
+activity bar). The Vitest extension auto-discovers `engine/__tests__/`;
+the Python extension auto-discovers `service/tests/` once pytest is
+enabled (already set in `settings.json`). Click any test to run it,
+or the bug icon next to it to debug with breakpoints. Same tests as
+`npm test` / `pytest service/tests/` on the command line — the sidebar
+is just faster for iterating on one failing test.
+
+**4. Check the whole loop actually works**: with both servers running,
+open `http://localhost:5173/display.html` in a browser and either fill
+out `http://localhost:8000/compose` from your phone (same Wi-Fi) or
+just curl it from the integrated terminal:
+
+```bash
+curl -X POST http://localhost:8000/message \
+  -H "Content-Type: application/json" \
+  -d '{"text": "TESTING FROM VS CODE", "priority": 1}'
+```
+
+The board should flap over to it within 5 seconds (the renderer's poll
+interval). If it doesn't, check the uvicorn terminal for errors first —
+most issues at this stage are the service not running or the wrong
+port, not the renderer.
+
 ## What the engine actually guarantees
 
 - `Board.setTarget(grid)` points every cell at a target code; `tick(dt)`

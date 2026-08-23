@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Service: uvicorn (debug, auto-reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["service.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+      "justMyCode": true
+    },
+    {
+      "name": "Service: pytest (all tests)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["service/tests", "-v"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

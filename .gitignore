@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 .venv/
 *.db
+
+# Session/progress log — local recovery notes, never pushed upstream.
+.claude/progress.md
