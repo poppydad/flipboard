@@ -1,9 +1,9 @@
 # flipboard
 
 Self-hosted split-flap message board. See `flipboard-build-plan-v2.md` for the
-full plan — this repo covers **Phase 0** through **Phase 3**, plus the
-scheduler/quiet-hours infrastructure from **Phase 4** (no actual channels
-yet — see "Channels and quiet hours" below).
+full plan — this repo covers **Phase 0** through **Phase 3**, plus 3 of 6
+**Phase 4** channels (milestone, weather, f1) and the scheduler/quiet-hours
+infrastructure they run on — see "Channels and quiet hours" below.
 
 ## What's here
 
@@ -34,9 +34,9 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   selection.py             Deterministic pick: pinned > priority > least-recently-shown
   config.py                is_quiet_hours() — see "Channels and quiet hours"
   messages.py              create_message(): shared by POST /message and channels
-  channels/                Scheduler + plugin interface, no channels built yet
+  channels/                Scheduler + plugin interface + milestone/weather/f1
   web/compose.html         Phone-friendly posting form, no framework
-  tests/                   47 pytest tests
+  tests/                   65 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -59,7 +59,7 @@ python3 python/verify_parity.py       # cross-language charset check
 python3 -m venv .venv
 .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000   # the API + DB
-.venv/bin/python -m pytest service/tests/                        # 47 tests
+.venv/bin/python -m pytest service/tests/                        # 65 tests
 
 npm run dev                           # renderer at http://localhost:5173/display.html
 ```
@@ -233,17 +233,30 @@ no special-casing required.
 
 ## Channels and quiet hours
 
-The scheduler and channel plugin interface exist (`service/channels/`),
-but `CHANNELS` is an empty list — no actual channel (weather, calendar,
-F1, MUFC, markets, milestone) is built yet. Each one needs something
-this repo doesn't have on its own: a weather API key and location,
-calendar OAuth, a sports data source, a stock watchlist, or a personal
-reference date. A channel is small once those exist — a `Channel(name,
-cron, run)` where `run()` returns a `ChannelMessage(text=...)` or
-`ChannelMessage(grid=<a template call>)`, appended to `CHANNELS`; the
-scheduler (APScheduler, in-process) handles the rest.
+`service/channels/` — a `Channel(name, cron, run)` where `run()` returns
+a `ChannelMessage(text=...)` or `ChannelMessage(grid=<a template call>)`
+or `None` (nothing to post this cycle), appended to `CHANNELS`. The
+scheduler (APScheduler, in-process) handles the rest, gating every
+channel on quiet hours before it even runs.
 
-Quiet hours *is* live, though, independent of any channel existing:
+Three of six are built:
+
+- **milestone** — a days-old counter (`banner`), 8:00am daily. No
+  external API, just a reference date.
+- **weather** — current conditions at a fixed location (`stat`), via
+  [Open-Meteo](https://open-meteo.com) (free, keyless), 6:30am and
+  4:00pm.
+- **f1** — countdown to lights-out before a race, top-3 results for a
+  couple of days after, via [OpenF1](https://openf1.org) (free,
+  keyless). Polls hourly and decides for itself whether there's
+  anything worth posting — "race weekend" isn't a fixed schedule, so
+  the cron is just a polling cadence.
+
+calendar, mufc, and markets aren't built — each needs something this
+repo doesn't have on its own: calendar OAuth or an ICS feed URL, a
+football data API key, or a stock watchlist.
+
+Quiet hours is fully wired regardless of which channels exist:
 `service/config.py`'s `is_quiet_hours()` (placeholder 21:00–07:00
 window — tune it to the household's real schedule) does two things —
 `GET /current` reports `sound_enabled: false` and `brightness: 0.0`
@@ -255,6 +268,6 @@ chance to post — `run_channel()` checks first and skips entirely.
 
 ## Next
 
-The channels themselves, once there's a location/API keys/calendar
-access/watchlist/reference dates to build them against, plus the Claude
-`/compose/smart` endpoint. See the build plan, §11.
+calendar, mufc, and markets, once there's an ICS feed/API key/watchlist
+to build them against, plus the Claude `/compose/smart` endpoint. See
+the build plan, §11.

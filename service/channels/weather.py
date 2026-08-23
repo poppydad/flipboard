@@ -1,0 +1,72 @@
+"""
+weather channel (build plan §11): current conditions via Open-Meteo
+(free, keyless — https://open-meteo.com), as a `stat` template.
+Runs at 6:30am and 4:00pm.
+"""
+from __future__ import annotations
+
+from ..compose.templates import stat
+from .base import Channel, ChannelMessage
+from .http import get_json
+
+LATITUDE = 40.304251
+LONGITUDE = -74.776508
+
+_URL = "https://api.open-meteo.com/v1/forecast"
+
+# WMO weather codes (Open-Meteo's `weather_code`) -> a short board-friendly label.
+_WEATHER_CODES = {
+    0: "CLEAR SKY",
+    1: "MOSTLY CLEAR",
+    2: "PARTLY CLOUDY",
+    3: "OVERCAST",
+    45: "FOG",
+    48: "FREEZING FOG",
+    51: "LIGHT DRIZZLE",
+    53: "DRIZZLE",
+    55: "DENSE DRIZZLE",
+    56: "FREEZING DRIZZLE",
+    57: "FREEZING DRIZZLE",
+    61: "LIGHT RAIN",
+    63: "RAIN",
+    65: "HEAVY RAIN",
+    66: "FREEZING RAIN",
+    67: "FREEZING RAIN",
+    71: "LIGHT SNOW",
+    73: "SNOW",
+    75: "HEAVY SNOW",
+    77: "SNOW GRAINS",
+    80: "RAIN SHOWERS",
+    81: "RAIN SHOWERS",
+    82: "VIOLENT SHOWERS",
+    85: "SNOW SHOWERS",
+    86: "SNOW SHOWERS",
+    95: "THUNDERSTORM",
+    96: "THUNDERSTORM",
+    99: "SEVERE STORM",
+}
+
+
+def run() -> ChannelMessage | None:
+    data = get_json(
+        _URL,
+        latitude=LATITUDE,
+        longitude=LONGITUDE,
+        current="temperature_2m,weather_code",
+        temperature_unit="fahrenheit",
+    )
+    if not isinstance(data, dict):
+        return None
+
+    current = data.get("current")
+    if not current or current.get("temperature_2m") is None:
+        return None
+
+    temp = current["temperature_2m"]
+    condition = _WEATHER_CODES.get(current.get("weather_code"), "")
+
+    grid = stat("WEATHER", f"{round(temp)}F", condition)
+    return ChannelMessage(grid=grid, priority=25, dwell_seconds=300)
+
+
+CHANNEL = Channel(name="weather", cron="30 6,16 * * *", run=run)

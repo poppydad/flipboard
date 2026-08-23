@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 47/47 passing
+.venv/bin/python -m pytest service/tests/   # 65/65 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -109,7 +109,7 @@ service/
   requirements.txt / requirements-dev.txt
   flipboard.service  sample systemd unit — untested here (macOS dev box);
                     verify the restart-survives-power-cycle claim on the Pi
-  tests/             pytest, 31 tests — see "What Phase 3 actually built"
+  tests/             pytest, 65 tests — see "What Phase 3 actually built"
                     for the compose-engine ones; selection tests use real
                     sqlite3 (:memory:) or a deterministic monkeypatched
                     clock, same "no hidden magic" spirit as the engine's
@@ -169,17 +169,17 @@ service/compose/          Replaces Phase 2's service/compose.py wholesale.
   submodule under `service/` can `from charset import Charset` without
   repeating the path hack Phase 2's `compose.py` used to do inline.
 
-## What Phase 4 actually built (infrastructure only — see below)
+## What Phase 4 actually built (infrastructure + 3 of 6 channels)
 
 **Scope was deliberately narrowed.** The full phase is 6 channels
 (weather, calendar, f1, mufc, markets, milestone) plus a Claude
-`/compose/smart` endpoint, and every single one of those needs something
-this session doesn't have: a weather API key + location, calendar OAuth,
-a football/F1 data source, a stock watchlist, or a personal reference
-date for milestone. Asked the user how to scope it; they chose
-infrastructure-only. **No channels exist yet** — `CHANNELS` in
-`service/channels/__init__.py` is an empty list. What's built is the
-machinery that real channels will plug into:
+`/compose/smart` endpoint. calendar, mufc, and markets each need
+something this session doesn't have: calendar OAuth/an ICS feed URL, a
+football data API key, a stock watchlist. Asked the user how to scope
+it; they chose infrastructure-only, then supplied what the other three
+needed as the conversation went on — a reference date for milestone
+(2025-11-08), coordinates for weather (40.304251, -74.776508), and f1
+needed nothing at all (OpenF1 is free/keyless) — so all three got built.
 
 ```
 service/
@@ -190,7 +190,16 @@ service/
                          share one pagination/dwell-split path
   channels/
     base.py                Channel (name, cron, run) / ChannelMessage
-    __init__.py             CHANNELS registry — empty, ready for weather.py etc.
+    __init__.py             CHANNELS registry: [milestone, weather, f1]
+    http.py                 get_json(): shared fetch helper, pins certifi's
+                          CA bundle explicitly (see note below)
+    milestone.py            days = today - REFERENCE_DATE, via banner,
+                          8:00am daily — no external API
+    weather.py               Open-Meteo (free, keyless), via stat,
+                          6:30am + 4:00pm
+    f1.py                    OpenF1 (free, keyless), via countdown/list,
+                          hourly poll that decides for itself whether
+                          there's a countdown or results worth posting
     scheduler.py            run_channel(): quiet-hours gate, catches a
                           channel's own exceptions so one bad channel
                           can't take down the scheduler. start_scheduler()/
@@ -199,6 +208,29 @@ service/
                           event loop, which is why it's started there and
                           not in a standalone script)
 ```
+
+- **`service/channels/http.py` pins certifi's CA bundle explicitly**
+  rather than trusting the host Python's default SSL config. Found this
+  the hard way: weather.py's first live test failed with
+  `CERTIFICATE_VERIFY_FAILED` even though `curl` hit the exact same URL
+  fine — this dev machine's python.org-installed Python isn't wired to
+  the macOS system keychain the way `curl` is. Explicit certifi avoids
+  depending on that being configured right on whatever machine (dev
+  laptop, Pi) ends up running this.
+- **f1.py wraps "now" behind a `_now()` function** instead of calling
+  `datetime.now(timezone.utc)` directly, specifically so tests can
+  monkeypatch it — `datetime` is an immutable C type, so `datetime.now`
+  itself can't be patched in place the way `time.time` can. Verified
+  live against the real OpenF1 API before writing the mocked tests: it
+  correctly found an actual upcoming race and displayed the right
+  countdown.
+- **All three channels verified against the live server's real sqlite
+  file, not just `:memory:` unit tests** — simulated their triggers by
+  calling `run_channel()` directly with `is_quiet_hours` patched to
+  `False`, confirmed each row's `source`/priority, decoded the stored
+  grid back to readable text, and for f1 specifically, watched the
+  result render correctly on the actual canvas in a browser (temporarily
+  pinning it, since it was genuinely quiet hours during testing).
 
 - **Quiet hours narrows *selection*, not just the wire fields.**
   `sound_enabled`/`brightness` in `GET /current` already flip correctly,
