@@ -64,18 +64,21 @@ renderer/                 Canvas 2D renderer. Consumes the engine, never the rev
   display.html              Entry point — npm run dev, open /display.html
 
 service/                  FastAPI + SQLite. LAN only, no auth.
-  main.py                  GET /current, POST /message, POST /compose/smart,
-                           GET /queue, DELETE /queue/{id}, POST /queue/{id}/unpin,
-                           POST /next, GET /compose
+  main.py                  GET /current, POST /message, POST /message/grid,
+                           POST /compose/smart, GET /queue, DELETE /queue/{id},
+                           POST /queue/{id}/unpin, POST /next, GET /compose,
+                           GET /compose/grid
   db.py                    SQLite schema (messages, display_log)
   compose/                 The layout engine — normalize/wrap/align/render/
                            templates. See "The layout engine" below.
   selection.py             Deterministic pick: pinned > priority > least-recently-shown
   config.py                is_quiet_hours() — see "Channels and quiet hours"
-  messages.py              create_message(): shared by POST /message and channels
+  messages.py              create_message(): shared by POST /message and channels;
+                           validate_grid(): the POST /message/grid boundary check
   channels/                Scheduler + plugin interface + milestone/weather/f1
   web/compose.html         Phone-friendly posting form, no framework
-  tests/                   77 pytest tests
+  web/grid.html            Color grid designer — paint all 132 cells directly
+  tests/                   82 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -171,6 +174,14 @@ curl -X POST http://localhost:8000/compose/smart \
 curl -X POST http://localhost:8000/compose/smart \
   -H "Content-Type: application/json" \
   -d '{"text": "Groceries: milk, eggs, bread"}'
+
+# POST /message/grid — raw 132-code array instead of text, for color
+# patterns. Codes 56-62 are the 7 chips (red, orange, yellow, green,
+# blue, violet, white); this fills row 0 with a red/blue stripe.
+# Easier in practice: http://localhost:8000/compose/grid, a paint UI.
+curl -X POST http://localhost:8000/message/grid \
+  -H "Content-Type: application/json" \
+  -d "{\"grid\": $(python3 -c 'print([56]*11+[60]*11+[0]*110)')}"
 ```
 
 **Inspect and manage what's queued:**
@@ -434,6 +445,16 @@ ago (or never). Once picked, a message holds the display for its
 `GET /compose` serves a plain-HTML/JS posting form — that's what an iOS
 Shortcut ("Post to Board" → Ask for Text → POST `/message`) or any
 browser on the LAN hits from a phone.
+
+`POST /message/grid` takes a raw 132-code array (one per cell, ROWS×COLS)
+instead of text — the equivalent of Vestaboard's raw-matrix API, for
+posting a color pattern instead of wrapped text. `GET /compose/grid`
+serves a click/drag paint UI over the 7 chip colors that builds that
+array and posts it; validation (`messages.py`'s `validate_grid`) lives
+only at this boundary — length must be exactly 132, every code must be
+in charset range — because it's the one place codes arrive untrusted;
+`create_message()`'s other callers (channels, `POST /message`'s own
+`render()` output) already build valid grids by construction.
 
 A message that overflows 6 rows doesn't truncate — `POST /message` calls
 the layout engine's `render()`, gets back multiple pages, and inserts one

@@ -10,9 +10,21 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from .compose import render
+from .compose import CHARSET, COLS, ROWS, render
 
 MIN_PAGE_DWELL_SECONDS = 20
+
+
+def validate_grid(grid: list[int]) -> None:
+    """Checked only at the untrusted boundary (POST /message/grid) — a
+    channel building a grid from a template is already trusted to get
+    this right, the same reasoning create_message's own callers rely on.
+    """
+    if len(grid) != ROWS * COLS:
+        raise ValueError(f"grid must have exactly {ROWS * COLS} cells, got {len(grid)}")
+    bad = [code for code in grid if not (0 <= code < CHARSET.size)]
+    if bad:
+        raise ValueError(f"invalid charset code(s) {sorted(set(bad))}; must be 0..{CHARSET.size - 1}")
 
 
 def create_message(

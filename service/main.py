@@ -20,7 +20,7 @@ from . import db
 from .channels.scheduler import start_scheduler, stop_scheduler
 from .compose import BLANK_GRID, CHARSET_VERSION, pick_smart_template
 from .config import BRIGHTNESS_NORMAL, BRIGHTNESS_QUIET_FLOOR, is_quiet_hours
-from .messages import create_message
+from .messages import create_message, validate_grid
 from .selection import Selector
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -41,6 +41,15 @@ app = FastAPI(title="flipboard", lifespan=lifespan)
 
 class MessageIn(BaseModel):
     text: str
+    priority: int = Field(default=50, ge=0)
+    dwell_seconds: int = Field(default=300, gt=0)
+    starts_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    pinned: bool = False
+
+
+class GridMessageIn(BaseModel):
+    grid: list[int]
     priority: int = Field(default=50, ge=0)
     dwell_seconds: int = Field(default=300, gt=0)
     starts_at: Optional[datetime] = None
@@ -101,6 +110,36 @@ def post_message(msg: MessageIn):
             conn,
             source="manual",
             text=msg.text,
+            priority=msg.priority,
+            dwell_seconds=msg.dwell_seconds,
+            starts_at=msg.starts_at.timestamp() if msg.starts_at else None,
+            expires_at=msg.expires_at.timestamp() if msg.expires_at else None,
+            pinned=msg.pinned,
+        )
+        row = conn.execute("SELECT * FROM messages WHERE id = ?", (ids[0],)).fetchone()
+    finally:
+        conn.close()
+    return _row_to_out(row, pages=len(ids))
+
+
+@app.post("/message/grid", response_model=MessageOut)
+def post_message_grid(msg: GridMessageIn):
+    """Direct pixel-level control over all 132 cells — the equivalent of
+    Vestaboard's raw-matrix API. Used by the grid designer at
+    GET /compose/grid, or any client that wants to post a pattern/mosaic
+    instead of wrapped text. Never paginated — a grid is always exactly
+    one page by construction."""
+    try:
+        validate_grid(msg.grid)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    conn = db.get_connection()
+    try:
+        ids = create_message(
+            conn,
+            source="manual",
+            grid=msg.grid,
             priority=msg.priority,
             dwell_seconds=msg.dwell_seconds,
             starts_at=msg.starts_at.timestamp() if msg.starts_at else None,
@@ -193,3 +232,8 @@ def force_next():
 @app.get("/compose")
 def compose_form():
     return FileResponse(WEB_DIR / "compose.html")
+
+
+@app.get("/compose/grid")
+def compose_grid_form():
+    return FileResponse(WEB_DIR / "grid.html")
