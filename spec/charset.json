@@ -1,0 +1,363 @@
+{
+  "version": 1,
+  "flaps": [
+    {
+      "code": 0,
+      "char": " ",
+      "type": "blank"
+    },
+    {
+      "code": 1,
+      "char": "A",
+      "type": "letter"
+    },
+    {
+      "code": 2,
+      "char": "B",
+      "type": "letter"
+    },
+    {
+      "code": 3,
+      "char": "C",
+      "type": "letter"
+    },
+    {
+      "code": 4,
+      "char": "D",
+      "type": "letter"
+    },
+    {
+      "code": 5,
+      "char": "E",
+      "type": "letter"
+    },
+    {
+      "code": 6,
+      "char": "F",
+      "type": "letter"
+    },
+    {
+      "code": 7,
+      "char": "G",
+      "type": "letter"
+    },
+    {
+      "code": 8,
+      "char": "H",
+      "type": "letter"
+    },
+    {
+      "code": 9,
+      "char": "I",
+      "type": "letter"
+    },
+    {
+      "code": 10,
+      "char": "J",
+      "type": "letter"
+    },
+    {
+      "code": 11,
+      "char": "K",
+      "type": "letter"
+    },
+    {
+      "code": 12,
+      "char": "L",
+      "type": "letter"
+    },
+    {
+      "code": 13,
+      "char": "M",
+      "type": "letter"
+    },
+    {
+      "code": 14,
+      "char": "N",
+      "type": "letter"
+    },
+    {
+      "code": 15,
+      "char": "O",
+      "type": "letter"
+    },
+    {
+      "code": 16,
+      "char": "P",
+      "type": "letter"
+    },
+    {
+      "code": 17,
+      "char": "Q",
+      "type": "letter"
+    },
+    {
+      "code": 18,
+      "char": "R",
+      "type": "letter"
+    },
+    {
+      "code": 19,
+      "char": "S",
+      "type": "letter"
+    },
+    {
+      "code": 20,
+      "char": "T",
+      "type": "letter"
+    },
+    {
+      "code": 21,
+      "char": "U",
+      "type": "letter"
+    },
+    {
+      "code": 22,
+      "char": "V",
+      "type": "letter"
+    },
+    {
+      "code": 23,
+      "char": "W",
+      "type": "letter"
+    },
+    {
+      "code": 24,
+      "char": "X",
+      "type": "letter"
+    },
+    {
+      "code": 25,
+      "char": "Y",
+      "type": "letter"
+    },
+    {
+      "code": 26,
+      "char": "Z",
+      "type": "letter"
+    },
+    {
+      "code": 27,
+      "char": "0",
+      "type": "digit"
+    },
+    {
+      "code": 28,
+      "char": "1",
+      "type": "digit"
+    },
+    {
+      "code": 29,
+      "char": "2",
+      "type": "digit"
+    },
+    {
+      "code": 30,
+      "char": "3",
+      "type": "digit"
+    },
+    {
+      "code": 31,
+      "char": "4",
+      "type": "digit"
+    },
+    {
+      "code": 32,
+      "char": "5",
+      "type": "digit"
+    },
+    {
+      "code": 33,
+      "char": "6",
+      "type": "digit"
+    },
+    {
+      "code": 34,
+      "char": "7",
+      "type": "digit"
+    },
+    {
+      "code": 35,
+      "char": "8",
+      "type": "digit"
+    },
+    {
+      "code": 36,
+      "char": "9",
+      "type": "digit"
+    },
+    {
+      "code": 37,
+      "char": ".",
+      "type": "punct"
+    },
+    {
+      "code": 38,
+      "char": ",",
+      "type": "punct"
+    },
+    {
+      "code": 39,
+      "char": ":",
+      "type": "punct"
+    },
+    {
+      "code": 40,
+      "char": ";",
+      "type": "punct"
+    },
+    {
+      "code": 41,
+      "char": "!",
+      "type": "punct"
+    },
+    {
+      "code": 42,
+      "char": "?",
+      "type": "punct"
+    },
+    {
+      "code": 43,
+      "char": "'",
+      "type": "punct"
+    },
+    {
+      "code": 44,
+      "char": "\"",
+      "type": "punct"
+    },
+    {
+      "code": 45,
+      "char": "#",
+      "type": "punct"
+    },
+    {
+      "code": 46,
+      "char": "$",
+      "type": "punct"
+    },
+    {
+      "code": 47,
+      "char": "(",
+      "type": "punct"
+    },
+    {
+      "code": 48,
+      "char": ")",
+      "type": "punct"
+    },
+    {
+      "code": 49,
+      "char": "-",
+      "type": "punct"
+    },
+    {
+      "code": 50,
+      "char": "+",
+      "type": "punct"
+    },
+    {
+      "code": 51,
+      "char": "&",
+      "type": "punct"
+    },
+    {
+      "code": 52,
+      "char": "=",
+      "type": "punct"
+    },
+    {
+      "code": 53,
+      "char": "/",
+      "type": "punct"
+    },
+    {
+      "code": 54,
+      "char": "°",
+      "type": "punct"
+    },
+    {
+      "code": 55,
+      "char": "%",
+      "type": "punct"
+    },
+    {
+      "code": 56,
+      "char": null,
+      "type": "chip",
+      "color": "#C0392B"
+    },
+    {
+      "code": 57,
+      "char": null,
+      "type": "chip",
+      "color": "#E67E22"
+    },
+    {
+      "code": 58,
+      "char": null,
+      "type": "chip",
+      "color": "#F1C40F"
+    },
+    {
+      "code": 59,
+      "char": null,
+      "type": "chip",
+      "color": "#27AE60"
+    },
+    {
+      "code": 60,
+      "char": null,
+      "type": "chip",
+      "color": "#2980B9"
+    },
+    {
+      "code": 61,
+      "char": null,
+      "type": "chip",
+      "color": "#8E44AD"
+    },
+    {
+      "code": 62,
+      "char": null,
+      "type": "chip",
+      "color": "#ECF0F1"
+    }
+  ],
+  "transliterations": {
+    "À": "A",
+    "Á": "A",
+    "Â": "A",
+    "Ä": "A",
+    "Ã": "A",
+    "È": "E",
+    "É": "E",
+    "Ê": "E",
+    "Ë": "E",
+    "Ì": "I",
+    "Í": "I",
+    "Î": "I",
+    "Ï": "I",
+    "Ò": "O",
+    "Ó": "O",
+    "Ô": "O",
+    "Ö": "O",
+    "Õ": "O",
+    "Ù": "U",
+    "Ú": "U",
+    "Û": "U",
+    "Ü": "U",
+    "Ñ": "N",
+    "Ç": "C",
+    "Ý": "Y",
+    "‘": "'",
+    "’": "'",
+    "“": "\"",
+    "”": "\"",
+    "–": "-",
+    "—": "-",
+    "…": "...",
+    "×": "X",
+    "÷": "/"
+  }
+}

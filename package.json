@@ -1,0 +1,21 @@
+{
+  "name": "flipboard-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless split-flap board engine (flap physics, no DOM)",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sim": "tsx cli/sim.ts",
+    "typecheck": "tsc --noEmit",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.8"
+  }
+}
