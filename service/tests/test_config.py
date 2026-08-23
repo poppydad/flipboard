@@ -5,11 +5,11 @@ from service.config import is_quiet_hours
 
 
 def test_wrapping_window_default_config():
-    # Default QUIET_HOURS_START/END is 21:00 -> 07:00, wrapping past midnight.
+    # Default QUIET_HOURS_START/END is 20:00 -> 07:00, wrapping past midnight.
     late_night = datetime(2026, 1, 1, 23, 0)
     early_morning = datetime(2026, 1, 2, 3, 0)
     midday = datetime(2026, 1, 1, 14, 0)
-    exactly_start = datetime(2026, 1, 1, 21, 0)
+    exactly_start = datetime(2026, 1, 1, 20, 0)
     exactly_end = datetime(2026, 1, 2, 7, 0)
 
     assert is_quiet_hours(late_night) is True

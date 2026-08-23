@@ -183,8 +183,8 @@ needed nothing at all (OpenF1 is free/keyless) — so all three got built.
 
 ```
 service/
-  config.py              is_quiet_hours() — placeholder 21:00-07:00 window
-                         and brightness floor, needs real tuning
+  config.py              is_quiet_hours() — real household window
+                         (20:00-07:00); brightness floor still placeholder
   messages.py             create_message() — extracted from main.py's old
                          inline insert code so POST /message and channels
                          share one pagination/dwell-split path
@@ -303,7 +303,8 @@ keeping as the fallback rather than deleting once Claude is wired in.
   `BoardAudio.setGain(0)` is that switch on the renderer side;
   `sound_enabled`/`brightness` in `GET /current` (driven by
   `service/config.py`'s `is_quiet_hours()`) is the wire format for it —
-  this is now wired end to end, but the window (21:00-07:00) and the
-  dim-vs-off choice (currently off, `BRIGHTNESS_QUIET_FLOOR = 0.0`) are
-  both placeholders pending the real household schedule and build plan
-  probe 6 (never run against actual hardware in this repo).
+  this is now wired end to end. The window is the household's real
+  schedule (20:00-07:00, tuned 2026-08-23). The dim-vs-off choice is
+  still a placeholder (currently off, `BRIGHTNESS_QUIET_FLOOR = 0.0`) —
+  that one needs build plan probe 6, never run against actual hardware
+  in this repo.

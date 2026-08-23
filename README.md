@@ -482,9 +482,9 @@ repo doesn't have on its own: calendar OAuth or an ICS feed URL, a
 football data API key, or a stock watchlist.
 
 Quiet hours is fully wired regardless of which channels exist:
-`service/config.py`'s `is_quiet_hours()` (placeholder 21:00–07:00
-window — tune it to the household's real schedule) does two things —
-`GET /current` reports `sound_enabled: false` and `brightness: 0.0`
+`service/config.py`'s `is_quiet_hours()` (8:00pm–7:00am, the
+household's real schedule) does two things — `GET /current` reports
+`sound_enabled: false` and `brightness: 0.0`
 during quiet hours, and `selection.py` excludes every non-pinned message
 from consideration, so only a pinned message can show and the board
 goes blank rather than displaying something inappropriate at 2am. This
