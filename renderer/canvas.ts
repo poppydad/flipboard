@@ -7,6 +7,7 @@ export interface TileMetrics {
   gap: number;
   originX: number;
   originY: number;
+  fontSize: number;
 }
 
 const TILE_BG = "#161616";
@@ -50,8 +51,32 @@ export class BoardCanvas {
     const gap = Math.max(2, Math.floor(cssW / this.cols) * 0.06);
     const tileW = (cssW - gap * (this.cols + 1)) / this.cols;
     const tileH = (cssH - gap * (this.rows + 1)) / this.rows;
+    const fontSize = this.fitFontSize(tileW, tileH);
 
-    return { tileW, tileH, gap, originX: gap, originY: gap };
+    return { tileW, tileH, gap, originX: gap, originY: gap, fontSize };
+  }
+
+  /**
+   * A physical flap can't grow to fit a wide glyph — the module is a fixed
+   * size, so the whole charset has to share one font size that the widest
+   * character (M/W/% etc.) still fits inside. Sizing purely off tileH (the
+   * old behavior) clips wide letters whenever a cell's aspect ratio gets
+   * narrow — e.g. a tall, narrow window. Shrink until every character in
+   * the charset measures within tileW.
+   */
+  private fitFontSize(tileW: number, tileH: number): number {
+    let size = tileH * 0.62;
+    this.ctx.font = `700 ${Math.floor(size)}px "Helvetica Neue", Arial, sans-serif`;
+    let maxWidth = 0;
+    for (const f of this.charset.flaps) {
+      if (!f.char || f.char === " ") continue;
+      maxWidth = Math.max(maxWidth, this.ctx.measureText(f.char).width);
+    }
+    const budget = tileW * 0.92;
+    if (maxWidth > budget && maxWidth > 0) {
+      size = size * (budget / maxWidth);
+    }
+    return size;
   }
 
   /** Full redraw of every cell — used for the initial paint and full-board changes. */
@@ -207,7 +232,7 @@ export class BoardCanvas {
     }
     if (!def.char) return;
     this.ctx.fillStyle = CHAR_FG;
-    this.ctx.font = `700 ${Math.floor(tileH * 0.62)}px "Helvetica Neue", Arial, sans-serif`;
+    this.ctx.font = `700 ${Math.floor(this.metrics.fontSize)}px "Helvetica Neue", Arial, sans-serif`;
     this.ctx.textAlign = "center";
     this.ctx.textBaseline = "middle";
     this.ctx.fillText(def.char, x + tileW / 2, y + tileH / 2 + tileH * 0.03);
