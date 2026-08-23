@@ -4,6 +4,10 @@ export default defineConfig({
   root: "renderer",
   server: {
     port: 5173,
+    // Bind to the LAN interface, not just localhost, so a phone/TV on the
+    // same Wi-Fi can reach it (e.g. http://<this machine's LAN IP>:5173) —
+    // needed for interim testing before the Pi + kiosk display exist.
+    host: true,
     // Dev-only bridge to the FastAPI service (`uvicorn service.main:app`).
     // Keeps the renderer same-origin with the API, matching how it'll be
     // served in production — no CORS needed on either side.
