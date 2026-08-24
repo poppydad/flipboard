@@ -450,8 +450,13 @@ browser on the LAN hits from a phone.
 instead of text — the equivalent of Vestaboard's raw-matrix API, for
 posting a color pattern instead of wrapped text. `GET /compose/grid`
 serves a click/drag paint UI over the 7 chip colors that builds that
-array and posts it; validation (`messages.py`'s `validate_grid`) lives
-only at this boundary — length must be exactly 132, every code must be
+array and posts it. A pattern and a caption aren't exclusive — letters
+and chips are both just codes in the same array (the same reasoning
+`engine/` already uses everywhere), so the paint UI also takes an
+optional caption line that composites onto one row of whatever's
+painted, all client-side, before posting the merged array through the
+same endpoint. Validation (`messages.py`'s `validate_grid`) lives only
+at this boundary — length must be exactly 132, every code must be
 in charset range — because it's the one place codes arrive untrusted;
 `create_message()`'s other callers (channels, `POST /message`'s own
 `render()` output) already build valid grids by construction.

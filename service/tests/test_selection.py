@@ -145,6 +145,41 @@ def test_pinned_message_preempts_an_in_progress_dwell(conn, monkeypatch):
     assert row["id"] == pinned_id
 
 
+def test_pinned_message_preempts_an_already_pinned_message(conn, monkeypatch):
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("service.selection.time.time", lambda: clock["t"])
+
+    first_pinned = insert(conn, priority=50, pinned=True, dwell_seconds=300)
+    selector = Selector()
+    first = selector.current(conn)
+    assert first["id"] == first_pinned
+
+    clock["t"] += 5
+    second_pinned = insert(conn, priority=50, pinned=True, dwell_seconds=300)
+    row = selector.current(conn)
+    assert row["id"] == second_pinned  # "show now" wins even over an already-pinned message
+
+
+def test_pinned_rotation_does_not_flap_once_each_has_had_its_turn(conn, monkeypatch):
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("service.selection.time.time", lambda: clock["t"])
+
+    a = insert(conn, priority=50, pinned=True, dwell_seconds=300)
+    b = insert(conn, priority=50, pinned=True, dwell_seconds=300)
+    selector = Selector()
+
+    first = selector.current(conn)
+    assert first["id"] == a  # both never shown — tie goes to insertion order
+
+    clock["t"] += 1
+    second = selector.current(conn)
+    assert second["id"] == b  # b hasn't shown yet either — preempts immediately
+
+    clock["t"] += 1
+    third = selector.current(conn)
+    assert third["id"] == b  # both have shown once now — holds, doesn't flap back to a
+
+
 def test_force_bypasses_dwell_hold(conn, monkeypatch):
     clock = {"t": 1000.0}
     monkeypatch.setattr("service.selection.time.time", lambda: clock["t"])

@@ -41,7 +41,10 @@ class Selector:
             still_dwelling = (now - self._current.selected_at) < row["dwell_seconds"] if row else False
             # A pinned message means "show now" — it should interrupt an in-progress
             # dwell hold, not wait behind it, even if the pin lands mid-message.
-            preempted = row is not None and not row["pinned"] and self._pinned_waiting(conn, now, quiet)
+            # This also has to cover pinning over an already-pinned message: without
+            # it, "Pin — show now" silently became "queue behind whatever's already
+            # pinned" the moment two messages were pinned at once.
+            preempted = row is not None and self._pinned_waiting(conn, now, quiet, currently_showing=row)
             if row is not None and self._eligible(row, now, quiet) and still_dwelling and not preempted:
                 return row
 
@@ -55,9 +58,30 @@ class Selector:
         conn.commit()
         return picked
 
-    def _pinned_waiting(self, conn: sqlite3.Connection, now: float, quiet: bool) -> bool:
-        rows = conn.execute("SELECT * FROM messages WHERE pinned = 1").fetchall()
-        return any(self._eligible(r, now, quiet) for r in rows)
+    def _pinned_waiting(
+        self, conn: sqlite3.Connection, now: float, quiet: bool, *, currently_showing: sqlite3.Row
+    ) -> bool:
+        """True if some pinned, eligible message should take over from what's
+        currently showing. If that's not itself pinned, any eligible pinned
+        candidate preempts it (the original rule). If it IS pinned, only a
+        candidate that's never been shown preempts — "just pinned" — so two
+        pinned messages don't fight over the display on every 5s poll once
+        each has had its turn; once shown, normal least-recently-shown
+        rotation among pinned messages takes over instead.
+        """
+        rows = conn.execute(
+            "SELECT m.*, (SELECT MAX(shown_at) FROM display_log WHERE message_id = m.id) AS last_shown "
+            "FROM messages m WHERE m.pinned = 1"
+        ).fetchall()
+        showing_is_pinned = bool(currently_showing["pinned"])
+        for r in rows:
+            if not self._eligible(r, now, quiet):
+                continue
+            if not showing_is_pinned:
+                return True
+            if r["id"] != currently_showing["id"] and r["last_shown"] is None:
+                return True
+        return False
 
     @staticmethod
     def _eligible(row: sqlite3.Row, now: float, quiet: bool = False) -> bool:
