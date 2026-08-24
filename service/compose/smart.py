@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import re
 
+from .charset import COLS
+from .normalize import normalize
 from .templates import countdown, list_template, stat
+from .wrap import wrap
 
 _COUNTDOWN_UNTIL_RE = re.compile(
     r"^(?P<number>\d+)\s+(?P<unit>days?|hours?|weeks?)\s+(?:until|till|to)\s+(?P<label>.+)$",
@@ -36,7 +39,26 @@ _COUNTDOWN_IN_RE = re.compile(
 # List items need >= this many comma-separated values before "label: a, b"
 # is read as a list rather than a stat's "value, context" (2 items).
 _LIST_MIN_ITEMS = 3
+# templates.list_template places items on fixed rows and slices to [:4].
+_MAX_LIST_ITEMS = 4
 _MAX_LABEL_LEN = 20
+
+
+def _fits(text: str) -> bool:
+    """True if `text` occupies at most one line of COLS codes.
+
+    Templates put each field on a fixed row via templates._one_line,
+    which keeps `lines[0]` and drops the rest — fine for the short
+    structured values channels feed it, but smart.pick() feeds it
+    arbitrary text a person typed. Anything that would wrap has to fall
+    through to render() instead, which paginates rather than truncating
+    (build plan §10: "never truncate silently"). Without this check
+    "Reminder: pick up the dry cleaning before six today" rendered as
+    "REMINDER / PICK UP THE DRY" and lost the rest.
+    """
+    if not text:
+        return True  # an omitted stat context is legal, not an overflow
+    return len(wrap(normalize(text), width=COLS)) <= 1
 
 
 def _colon_split(text: str) -> tuple[str, str] | None:
@@ -57,19 +79,35 @@ def pick(text: str) -> list[int] | None:
 
     m = _COUNTDOWN_UNTIL_RE.match(text) or _COUNTDOWN_IN_RE.match(text)
     if m:
-        return countdown(m["label"], m["number"], m["unit"])
+        fields = (m["label"], m["number"], m["unit"])
+        if not all(_fits(f) for f in fields):
+            return None
+        return countdown(*fields)
 
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     if len(lines) >= 2:
-        return list_template(lines[0], lines[1:])
+        return _list_or_none(lines[0], lines[1:])
 
     colon = _colon_split(text)
     if colon:
         label, rest = colon
         items = [i.strip() for i in rest.split(",") if i.strip()]
         if len(items) >= _LIST_MIN_ITEMS:
-            return list_template(label, items)
+            return _list_or_none(label, items)
         value, _, context = rest.partition(",")
-        return stat(label, value.strip(), context.strip())
+        value, context = value.strip(), context.strip()
+        if not all(_fits(f) for f in (label, value, context)):
+            return None
+        return stat(label, value, context)
 
     return None
+
+
+def _list_or_none(header: str, items: list[str]) -> list[int] | None:
+    """A list only survives if every line fits and nothing would be
+    dropped by list_template's items[:4] slice."""
+    if len(items) > _MAX_LIST_ITEMS:
+        return None
+    if not _fits(header) or not all(_fits(i) for i in items):
+        return None
+    return list_template(header, items)

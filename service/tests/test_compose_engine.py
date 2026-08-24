@@ -175,3 +175,20 @@ def test_chips_border_columns_are_solid_chip_code():
     for r in range(ROWS):
         assert grid[r * COLS] == red_code
         assert grid[r * COLS + COLS - 1] == red_code
+
+
+def test_emoji_with_variation_selector_still_resolves_to_a_chip():
+    """Phones send "❤️" as U+2764 U+FE0F. normalize() iterates codepoints,
+    so the trailing selector must be skipped rather than dropping the chip."""
+    red = next(f.code for f in CHARSET.flaps if f.type == "chip" and f.color == "#C0392B")
+    assert normalize("❤️") == [red]
+    assert normalize("A❤️B") == [CHARSET.code_for("A"), red, CHARSET.code_for("B")]
+
+
+def test_emoji_table_keys_are_single_codepoints():
+    """A multi-codepoint key can never match, because normalize() walks the
+    string one codepoint at a time — it would be silently dead."""
+    from service.compose.normalize import _EMOJI_TO_COLOR_NAME
+
+    for emoji in _EMOJI_TO_COLOR_NAME:
+        assert len(emoji) == 1, f"{emoji!r} is {len(emoji)} codepoints and can never match"

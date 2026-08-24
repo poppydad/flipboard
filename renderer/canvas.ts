@@ -33,6 +33,17 @@ export class BoardCanvas {
     this.metrics = this.computeMetrics();
   }
 
+  /**
+   * Panel brightness, 0..1, driven by the service's quiet-hours state.
+   * 0 is a hard off — the counterpart to BoardAudio.setGain(0), and what
+   * config.py's BRIGHTNESS_QUIET_FLOOR asks for. A CSS filter rather than
+   * a redraw, so it survives dirty-tile updates and costs nothing per frame.
+   */
+  setBrightness(value: number): void {
+    const b = Math.max(0, Math.min(1, value));
+    this.canvas.style.filter = b === 1 ? "" : `brightness(${b})`;
+  }
+
   /** Recomputes tile size/origin from the current canvas pixel size. Call after any resize. */
   resize(): void {
     const dpr = window.devicePixelRatio || 1;

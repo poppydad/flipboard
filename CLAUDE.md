@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 77/77 passing
+.venv/bin/python -m pytest service/tests/   # 98/98 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -132,6 +132,13 @@ service/
   curl while testing Phase 3 pagination, fixed by passing `time.time()`
   explicitly on insert — see the regression test in `test_selection.py`
   with a monkeypatched sub-second clock.
+- **`idx_display_log_message_id` is load-bearing, not decoration.**
+  `selection.py`'s `_pick` and `_pinned_waiting` both correlate every
+  message against `MAX(shown_at)` for that message. Unindexed that's
+  O(messages x log rows): measured 1.5s per `GET /current` at three
+  months of real traffic and 24.8s at one year, against a renderer that
+  polls every 5s. With the index the same year's data selects in 34ms
+  and five years in 188ms — which is also why there's no row reaper.
 - **No auth, CORS, or reverse proxy needed** — the Vite dev server proxies
   API routes to :8000 so the renderer and service are same-origin in dev,
   matching how they'd be served together in production.
@@ -155,6 +162,13 @@ service/compose/          Replaces Phase 2's service/compose.py wholesale.
   templates.py               banner / stat / list / countdown / chips
 ```
 
+- **`normalize()` walks codepoints, so emoji keys must be single
+  codepoints.** Phones append U+FE0F (the variation selector) to
+  characters with both a text and an emoji presentation, so `"❤️"`
+  arrives as two codepoints and a two-codepoint dict key can never
+  match — the chip was silently dropped. `_VARIATION_SELECTOR` is now
+  skipped in the loop and `test_emoji_table_keys_are_single_codepoints`
+  guards the table against the same mistake.
 - **Operates on code lists end to end, never strings mid-pipeline** — the
   engine's whole "cells are integer codes" philosophy extended into the
   composer. This is what makes chips wrap identically to letters with no
@@ -200,15 +214,30 @@ service/
     f1.py                    OpenF1 (free, keyless), via countdown/list,
                           hourly poll that decides for itself whether
                           there's a countdown or results worth posting
-    scheduler.py            run_channel(): quiet-hours gate, catches a
-                          channel's own exceptions so one bad channel
-                          can't take down the scheduler. start_scheduler()/
+    scheduler.py            run_channel(): quiet-hours gate, _supersede(),
+                          catches a channel's own exceptions so one bad
+                          channel can't take down the scheduler. start_scheduler()/
                           stop_scheduler() wired into main.py's FastAPI
                           lifespan (AsyncIOScheduler — needs a running
                           event loop, which is why it's started there and
                           not in a standalone script)
 ```
 
+- **A channel's new message supersedes its own previous one**
+  (`scheduler.py`'s `_supersede`). A cron firing is a *poll*, not
+  necessarily news: f1 polls hourly but its countdown only changes ~37
+  times in the 14 days before a race, so 89% of its posts were exact
+  duplicates. Every one used to leave a permanent row, and because
+  `_pick` ties every never-shown row at `last_shown = -1.0` and sorts
+  stably, the **lowest id — the stalest countdown — won every time**. A
+  board counting down to a race sat on "14 DAYS" for two hours and took
+  28 hours to drain 336 rows, while manual messages (priority 50) queued
+  behind f1's 15. The `UPDATE` is scoped by `source`, so `POST /message`
+  is untouched, and runs in the same transaction as the insert that
+  follows, so a channel is never left with its old message expired and
+  no new one in place. Note this removes the *backlog*, not the priority
+  ordering: one live f1 message still legitimately preempts a manual one,
+  which is §9's documented rule, not a bug.
 - **`service/channels/http.py` pins certifi's CA bundle explicitly**
   rather than trusting the host Python's default SSL config. Found this
   the hard way: weather.py's first live test failed with
@@ -272,6 +301,16 @@ onto the existing templates, no network call:
 - multi-line text (header line + item lines) → `list`
 - anything else → `None`
 
+`pick()` also returns `None` when a matched shape *wouldn't fit* —
+`smart.py`'s `_fits()` checks each field against one line, and rejects
+lists over 4 items. Templates place each field on a fixed row via
+`templates._one_line`, which keeps `lines[0]` and silently drops the
+rest; that's fine for the short structured values channels feed it, but
+`pick()` feeds it whatever a person typed. Without the check,
+`"Reminder: pick up the dry cleaning before six today"` rendered as
+`"REMINDER / PICK UP THE DRY"` and lost the rest — worse than plain
+`POST /message`, which this endpoint promises never to be.
+
 `None` isn't a failure — `POST /compose/smart` in `service/main.py`
 falls straight through to the normal `create_message(text=...)` path
 (the same one `POST /message` already uses) whenever nothing matches,
@@ -295,16 +334,26 @@ keeping as the fallback rather than deleting once Claude is wired in.
 ## Constraints that shouldn't move
 
 - LAN only, no auth — it's a hallway board, not a product.
-- SQLite, not Postgres — single-digit writes a day. `service/flipboard.db`
-  is gitignored; each environment gets its own.
+- SQLite, not Postgres — but note the write rate is no longer
+  single-digit: three channels on cron put ~27 rows/day in `messages` and
+  ~288/day in `display_log`. That's still trivially within SQLite, but it
+  is what makes `idx_display_log_message_id` load-bearing rather than
+  decorative (see below). `service/flipboard.db` is gitignored; each
+  environment gets its own.
 - IPS/VA target display, never OLED — static grid, burn-in risk.
 - Quiet hours matter — there's an infant in the house. Sound and
   brightness both need a hard off-switch, not just a dim setting.
-  `BoardAudio.setGain(0)` is that switch on the renderer side;
-  `sound_enabled`/`brightness` in `GET /current` (driven by
-  `service/config.py`'s `is_quiet_hours()`) is the wire format for it —
-  this is now wired end to end. The window is the household's real
-  schedule (20:00-07:00, tuned 2026-08-23). The dim-vs-off choice is
+  `BoardAudio.setGain(0)` and `BoardCanvas.setBrightness(0)` are those
+  switches on the renderer side; `sound_enabled`/`brightness` in
+  `GET /current` (driven by `service/config.py`'s `is_quiet_hours()`) is
+  the wire format for both. Verified end to end in a real browser during
+  live quiet hours: the service sends `brightness: 0.0` and the canvas'
+  computed filter becomes `brightness(0)`. Brightness was declared on
+  the payload interface but never applied for a while — sound was wired,
+  brightness was dead on arrival — so if you touch `poll()` in
+  `renderer/main.ts`, check both, not just the one that makes noise.
+  The window is the household's real schedule (20:00-07:00, tuned
+  2026-08-23). The dim-vs-off choice is
   still a placeholder (currently off, `BRIGHTNESS_QUIET_FLOOR = 0.0`) —
   that one needs build plan probe 6, never run against actual hardware
   in this repo.

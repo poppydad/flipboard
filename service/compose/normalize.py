@@ -32,11 +32,19 @@ _CHIP_HEX_BY_NAME = {
     "white": "#ECF0F1",
 }
 
+# U+FE0F, the emoji variation selector. Phones append it to characters
+# that have both a text and an emoji presentation, so "❤️" arrives as two
+# codepoints (U+2764 U+FE0F). normalize() iterates codepoints, so a
+# two-codepoint key here could never match and the chip was silently
+# dropped instead — keys below must stay single-codepoint, which
+# test_emoji_table_keys_are_single_codepoints enforces.
+_VARIATION_SELECTOR = "\ufe0f"
+
 # A small, explicit emoji -> chip-color-name table. Extend as needed;
 # anything not listed here just falls through to "illegal, dropped."
 _EMOJI_TO_COLOR_NAME = {
     "🔴": "red",
-    "❤️": "red",
+    "❤": "red",
     "🟠": "orange",
     "🟡": "yellow",
     "💛": "yellow",
@@ -47,7 +55,6 @@ _EMOJI_TO_COLOR_NAME = {
     "🟣": "violet",
     "💜": "violet",
     "⚪": "white",
-    "⚪️": "white",
 }
 
 
@@ -65,6 +72,8 @@ def normalize(text: str) -> list[int]:
     # dangling blank code with nothing after it.
 
     for ch in text.strip():
+        if ch == _VARIATION_SELECTOR:
+            continue  # a presentation hint, not a character — never its own cell
         if ch == "\n":
             codes.append(NEWLINE)
             pending_blank = False

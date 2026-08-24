@@ -105,3 +105,65 @@ def test_every_match_is_a_valid_full_grid():
         assert len(grid) == ROWS * COLS
         for code in grid:
             assert 0 <= code < CHARSET.size
+
+
+# --- overflow falls through instead of truncating -----------------------------
+#
+# templates._one_line keeps lines[0] and drops the rest, and list_template
+# slices items[:4]. That's fine for the short structured values channels
+# feed it, but pick() feeds it text a person typed. Anything that would be
+# cut has to return None so the caller uses render(), which paginates
+# (build plan §10: "never truncate silently").
+
+
+def test_overlong_stat_value_falls_through_rather_than_truncating():
+    # Previously rendered as "REMINDER / PICK UP THE DRY", losing the rest.
+    assert pick("Reminder: pick up the dry cleaning before six today") is None
+
+
+def test_more_than_four_list_items_falls_through():
+    assert pick("Groceries: milk, eggs, bread, oats, quinoa, lentils") is None
+    assert pick("Packing\nPassport\nChargers\nToothbrush\nSunscreen\nHeadphones") is None
+
+
+def test_exactly_four_list_items_still_matches():
+    text = _decode(pick("Groceries: milk, eggs, bread, oats"))
+    for word in ("GROCERIES", "MILK", "EGGS", "BREAD", "OATS"):
+        assert word in text
+
+
+def test_overlong_list_item_falls_through():
+    assert pick("Today: milk, eggs, remember to call the plumber back about the leak") is None
+
+
+def test_overlong_countdown_label_falls_through():
+    assert pick("5 days until the extremely long awaited summer vacation trip") is None
+
+
+def test_nothing_that_matches_a_template_loses_a_word():
+    """The contract POST /compose/smart claims: never worse than
+    POST /message. Every word that goes in comes out, on whichever path
+    pick() chooses."""
+    from service.compose import render
+
+    inputs = [
+        "Outside: 72F, feels chilly",
+        "Groceries: milk, eggs, bread",
+        "Status: OK",
+        "Reminder: pick up the dry cleaning before six today",
+        "Packing\nPassport\nChargers\nToothbrush\nSunscreen\nHeadphones",
+        "Groceries: milk, eggs, bread, oats, quinoa, lentils",
+    ]
+    def words(s: str) -> set[str]:
+        # Normalize both sides identically — render() legitimately keeps
+        # punctuation ("REMINDER:"), the templates drop it.
+        return {w for w in s.upper().replace(":", " ").replace(",", " ").split() if w}
+
+    for text in inputs:
+        grid = pick(text)
+        pages = [grid] if grid is not None else render(text)
+        shown: set[str] = set()
+        for page in pages:
+            shown |= words(_decode(page))
+        expected = words(text)
+        assert expected <= shown, f"{text!r} lost {sorted(expected - shown)}"

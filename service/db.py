@@ -28,6 +28,14 @@ CREATE TABLE IF NOT EXISTS display_log (
   message_id INTEGER REFERENCES messages(id),
   shown_at REAL NOT NULL
 );
+
+-- selection.py's _pick and _pinned_waiting both correlate every message
+-- against MAX(shown_at) for that message. Unindexed that's a full scan of
+-- display_log per candidate row, i.e. O(messages x log entries): measured
+-- 1.5s per GET /current at three months of real traffic and 24.8s at one
+-- year, against a renderer that polls every 5s. With this index the same
+-- year's data selects in 34ms.
+CREATE INDEX IF NOT EXISTS idx_display_log_message_id ON display_log(message_id);
 """
 
 

@@ -1,10 +1,13 @@
 import sqlite3
+import time
 
 import pytest
 
 from service.channels.base import Channel, ChannelMessage
 from service.channels.scheduler import run_channel
 from service.db import SCHEMA
+from service.messages import create_message
+from service.selection import Selector
 
 
 class _NoCloseConnection:
@@ -93,3 +96,119 @@ def test_channel_that_raises_does_not_propagate(conn, monkeypatch):
 
     count = conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"]
     assert count == 0
+
+
+# --- superseding a channel's previous message --------------------------------
+#
+# Every test above fires a channel exactly once, which is why unbounded
+# accumulation was invisible: the bug only exists on the second firing.
+# These fire twice or more.
+
+
+def _eligible(conn, now=None):
+    now = now if now is not None else time.time()
+    return conn.execute(
+        "SELECT * FROM messages WHERE expires_at IS NULL OR expires_at > ? ORDER BY id",
+        (now,),
+    ).fetchall()
+
+
+def test_second_firing_supersedes_the_first(conn, monkeypatch):
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+    values = iter(["LIGHTS OUT 3 DAYS", "LIGHTS OUT 2 DAYS"])
+    channel = Channel(name="f1", cron="0 * * * *", run=lambda: ChannelMessage(text=next(values)))
+
+    run_channel(channel)
+    run_channel(channel)
+
+    live = _eligible(conn)
+    assert len(live) == 1, "a channel's newest message should be the only eligible one"
+    assert live[0]["raw_text"] == "LIGHTS OUT 2 DAYS"
+
+
+def test_superseded_row_is_expired_not_deleted(conn, monkeypatch):
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+    values = iter(["FIRST", "SECOND"])
+    channel = Channel(name="f1", cron="0 * * * *", run=lambda: ChannelMessage(text=next(values)))
+
+    run_channel(channel)
+    run_channel(channel)
+
+    all_rows = conn.execute("SELECT * FROM messages ORDER BY id").fetchall()
+    assert len(all_rows) == 2, "history is kept — superseding expires, it doesn't DELETE"
+    assert all_rows[0]["expires_at"] is not None
+    assert all_rows[1]["expires_at"] is None
+
+
+def test_hourly_polling_never_accumulates(conn, monkeypatch):
+    """The actual regression: f1 polls hourly for 14 days before a race.
+    Before the fix this left 336 permanent rows and the board sat on the
+    stalest of them."""
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+    hour = {"n": 0}
+
+    def run():
+        hour["n"] += 1
+        return ChannelMessage(text=f"LIGHTS OUT {14 - hour['n'] // 24} DAYS", priority=15)
+
+    channel = Channel(name="f1", cron="0 * * * *", run=run)
+    for _ in range(14 * 24):
+        run_channel(channel)
+
+    live = _eligible(conn)
+    assert len(live) == 1, f"336 polls should leave 1 eligible message, not {len(live)}"
+    assert live[0]["raw_text"] == "LIGHTS OUT 0 DAYS", "the newest countdown, not the oldest"
+
+
+def test_supersede_is_scoped_to_the_channel(conn, monkeypatch):
+    """A channel must never expire another channel's message, or a manual
+    one — POST /message posts at source='manual' and is not a channel."""
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+    create_message(conn, source="manual", text="DINNER AT SEVEN", priority=50)
+    run_channel(Channel(name="weather", cron="30 6 * * *", run=lambda: ChannelMessage(text="72F")))
+    run_channel(Channel(name="f1", cron="0 * * * *", run=lambda: ChannelMessage(text="RACE DAY")))
+    run_channel(Channel(name="f1", cron="0 * * * *", run=lambda: ChannelMessage(text="LIGHTS OUT")))
+
+    live = {r["source"]: r["raw_text"] for r in _eligible(conn)}
+    assert live == {"manual": "DINNER AT SEVEN", "weather": "72F", "f1": "LIGHTS OUT"}
+
+
+def test_polling_channel_leaves_no_backlog_ahead_of_a_manual_message(conn, monkeypatch):
+    """What superseding actually fixes. f1 outranks manual by priority (15
+    vs 50) and legitimately preempts it while it has something live to say
+    — that's §9's selection rule, not a bug. The bug was the *backlog*:
+    a week of hourly polls left 168 permanent rows, so manual stayed buried
+    for ~14 hours of dwell even after f1 had nothing current to say.
+    Now exactly one f1 row ever competes, and manual surfaces the moment
+    it expires."""
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+    monkeypatch.setattr("service.selection.is_quiet_hours", lambda: False)
+
+    channel = Channel(name="f1", cron="0 * * * *", run=lambda: ChannelMessage(text="LIGHTS OUT", priority=15))
+    for _ in range(7 * 24):
+        run_channel(channel)
+    create_message(conn, source="manual", text="DINNER AT SEVEN", priority=50)
+
+    ahead = [r for r in _eligible(conn) if r["priority"] < 50]
+    assert len(ahead) == 1, f"168 polls should leave 1 row ahead of manual, not {len(ahead)}"
+
+    # once the channel's single live message expires, manual is next up —
+    # previously it waited out 167 more stale rows first.
+    conn.execute("UPDATE messages SET expires_at = ? WHERE source = 'f1'", (time.time() - 1,))
+    conn.commit()
+    assert Selector().current(conn, force=True)["source"] == "manual"
+
+
+def test_multi_page_channel_message_survives_its_own_supersede(conn, monkeypatch):
+    """Supersede runs before the insert and in the same transaction, so a
+    paginated channel message must not expire its own later pages."""
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+    long_text = " ".join(f"WORD{i}" for i in range(60))
+    channel = Channel(name="calendar", cron="0 7 * * *", run=lambda: ChannelMessage(text=long_text))
+
+    run_channel(channel)
+    run_channel(channel)
+
+    live = _eligible(conn)
+    assert len(live) > 1, "a paginated message should keep all of its pages eligible"
+    assert all(r["raw_text"] == long_text for r in live)

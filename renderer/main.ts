@@ -85,6 +85,11 @@ async function poll(): Promise<void> {
 
     board.setTarget(data.cells);
     audio.setGain(data.sound_enabled ? 1 : 0);
+    // Quiet hours is a hard off-switch on both channels, not just sound —
+    // the service sends brightness 0 during the window (config.py's
+    // BRIGHTNESS_QUIET_FLOOR). Older payloads may omit it; full brightness
+    // is the safe default there.
+    renderer.setBrightness(typeof data.brightness === "number" ? data.brightness : 1);
   } catch {
     // LAN board, service may not be up yet — a failed fetch just means "nothing changed."
   }

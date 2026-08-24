@@ -4,11 +4,13 @@ APScheduler wiring (build plan constraint table: "APScheduler in-process
 channel (service/channels/CHANNELS) gets a cron job; when it fires, the
 channel decides what to say and this module handles posting it — quiet
 hours gates here, not in each channel, so no channel has to remember to
-check it itself.
+check it itself. Superseding the channel's previous message happens here
+for the same reason (see _supersede).
 """
 from __future__ import annotations
 
 import logging
+import time
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -21,6 +23,34 @@ from ..messages import create_message
 logger = logging.getLogger("flipboard.scheduler")
 
 _scheduler: AsyncIOScheduler | None = None
+
+
+def _supersede(conn, source: str, now: float) -> int:
+    """Expires a channel's still-live messages so its newest one replaces
+    them rather than queueing behind them.
+
+    A cron firing is a *poll*, not necessarily new information: f1 polls
+    hourly but its countdown only changes ~37 times across the 14 days
+    before a race, so 89% of its posts are exact duplicates of the row
+    already in the table. Without this, every poll left a permanent row
+    (27/day across the three channels), and because `_pick` ties every
+    never-shown row at last_shown = -1.0 and sorts stably, the *lowest
+    id* — the stalest countdown — won every time. A board counting down
+    to a race would sit on "14 DAYS" for two hours, take 28 hours to
+    drain, and starve manual messages, which sit at priority 50 behind
+    f1's 15.
+
+    Scoped by `source`, so POST /message is untouched: only a channel
+    supersedes its own output. Runs in the same transaction as the
+    insert that follows (create_message commits both), so a channel is
+    never left with its old message expired and no new one in place.
+    """
+    cur = conn.execute(
+        "UPDATE messages SET expires_at = ? "
+        "WHERE source = ? AND (expires_at IS NULL OR expires_at > ?)",
+        (now, source, now),
+    )
+    return cur.rowcount
 
 
 def run_channel(channel: Channel) -> None:
@@ -42,6 +72,9 @@ def run_channel(channel: Channel) -> None:
 
     conn = db.get_connection()
     try:
+        superseded = _supersede(conn, channel.name, time.time())
+        if superseded:
+            logger.info("channel %r superseded %d previous message(s)", channel.name, superseded)
         create_message(
             conn,
             source=channel.name,
