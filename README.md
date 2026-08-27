@@ -418,6 +418,33 @@ kill -9 12345
 Then start the server again as normal (`npm run dev` /
 `.venv/bin/uvicorn ...`).
 
+**A code or config change seems to have no effect — but the API still
+answers.** This is the nastiest one, because nothing looks broken. A
+leftover manually-started `uvicorn` can still be holding `:8000`, so the
+one you *meant* to run fails to bind and restarts in a loop, while `curl
+/current` cheerfully answers — from the **old** process running **old**
+code. Under systemd the giveaway is `Active: activating` with a climbing
+`restart counter`, but `curl` returning 200 the whole time hides it.
+
+Don't trust the fact that the port responds. Ask which process owns it:
+
+```bash
+ss -lptn 'sport = :8000'
+```
+
+That prints the actual PID. If it isn't the one systemd reports
+(`systemctl --user status flipboard`), kill it and restart:
+
+```bash
+kill <the-pid-from-ss>
+systemctl --user reset-failed flipboard
+systemctl --user restart flipboard
+```
+
+Symptoms this explains: an environment variable that "does nothing", a
+newly added route returning 404, an edit to `service/` that never shows
+up. On macOS use `lsof -i :8000 -sTCP:LISTEN` instead of `ss`.
+
 **The board isn't updating after I post a message.** Check three things
 in order: (1) is uvicorn actually running and did it log the POST
 without a traceback — a stuck/crashed service is the most common cause;
