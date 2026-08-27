@@ -19,6 +19,14 @@ def test_wrapping_window_default_config():
     assert is_quiet_hours(exactly_end) is False  # end boundary is exclusive — wakes right at quiet_end
 
 
+def test_disabled_by_env_override_is_never_quiet(monkeypatch):
+    # FLIPBOARD_QUIET_HOURS=off, resolved to this flag at import.
+    monkeypatch.setattr(config, "QUIET_HOURS_ENABLED", False)
+
+    # 3am, squarely inside the default window, is still not quiet.
+    assert is_quiet_hours(datetime(2026, 1, 2, 3, 0)) is False
+
+
 def test_same_day_window_that_does_not_wrap(monkeypatch):
     # e.g. a midday nap window, 13:00-15:00 — start < end, no midnight wrap.
     monkeypatch.setattr(config, "QUIET_HOURS_START", time(13, 0))

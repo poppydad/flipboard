@@ -2,14 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Post to Board</title>
+<!-- "Add to Home Screen" on iOS: opens without Safari's chrome, so posting a
+     message is one tap from the home screen rather than a bookmark hunt. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="Board" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#111111" />
+<link rel="apple-touch-icon" href="/icon.png" />
+<link rel="icon" href="/icon.png" />
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     max-width: 480px;
     margin: 2rem auto;
-    padding: 0 1rem;
+    /* viewport-fit=cover means the page runs under the notch/home indicator
+       when launched from the home screen; keep content clear of both. */
+    padding: env(safe-area-inset-top) calc(1rem + env(safe-area-inset-right))
+             env(safe-area-inset-bottom) calc(1rem + env(safe-area-inset-left));
     background: #111;
     color: #eee;
   }

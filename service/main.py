@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import db
@@ -24,6 +25,10 @@ from .messages import create_message, validate_grid
 from .selection import Selector
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+# `npm run build` output. Present on the Pi (and any machine that has run the
+# build); absent on a dev box that only ever runs `npm run dev`, where Vite
+# serves the renderer itself and proxies the API here instead.
+DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
 
 selector = Selector()
 
@@ -237,3 +242,22 @@ def compose_form():
 @app.get("/compose/grid")
 def compose_grid_form():
     return FileResponse(WEB_DIR / "grid.html")
+
+
+@app.get("/icon.png")
+def icon():
+    """Home-screen icon for the phone form (see compose.html's meta tags)."""
+    return FileResponse(WEB_DIR / "icon.png", media_type="image/png")
+
+
+# --- the board itself -------------------------------------------------
+# Registered last so every API route above wins the match. Only mounted when
+# dist/ exists, so a dev box that has never run `npm run build` still starts
+# (Vite serves the renderer there and proxies these routes back to us).
+if DIST_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
+
+    @app.get("/")
+    @app.get("/display.html")
+    def display():
+        return FileResponse(DIST_DIR / "display.html")

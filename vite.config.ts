@@ -2,6 +2,14 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   root: "renderer",
+  // `npm run build` emits a static bundle to dist/ at the repo root, which
+  // service/main.py serves directly. That's what runs on the Pi — the dev
+  // server below is for development on a laptop, not for the real board.
+  build: {
+    outDir: "../dist",
+    emptyOutDir: true,
+    rollupOptions: { input: "renderer/display.html" },
+  },
   server: {
     port: 5173,
     // Bind to the LAN interface, not just localhost, so a phone/TV on the

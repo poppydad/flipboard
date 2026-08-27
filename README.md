@@ -21,23 +21,41 @@ network, showing whatever message the software decides is current. If
 one is already running and you just want to put text on it:
 
 1. Make sure your phone or laptop is on the same Wi-Fi as the board.
-2. Open a web browser and go to `http://<the board's address>:8000/compose`
-   — ask whoever set it up for the address if you don't know it (it
-   looks like `192.168.1.42`, four numbers separated by dots).
+2. Open a web browser and go to:
+
+   **http://raspberrypi.local:8000/compose**
+
+   (If that doesn't load — some Android phones and older routers don't do
+   `.local` names — use the board's IP address instead, e.g.
+   `http://192.168.1.241:8000/compose`. Ask whoever set it up, or run
+   `hostname -I` on the board itself.)
 3. Type your message. Check **"Pin"** if you want it to stay up until
    someone unpins it — otherwise it takes its turn in rotation with
    anything else queued (weather updates, other messages, etc). Tap
    **Send**. It appears on the board within about 5 seconds.
 
-**One-tap posting from an iPhone** (set up once, optional): open the
-**Shortcuts** app → tap **+** for a new shortcut → add an **"Ask for
-Text"** action → add a **"Get Contents of URL"** action below it, set
-the URL to `http://<the board's address>:8000/message`, method
-**POST**, and the request body to JSON with `{"text": "Provided Input"}`
-(tap the text field and choose the "Provided Input" variable from the
-Ask for Text step above it, instead of typing it literally). Name the
-shortcut "Post to Board" and add it to your Home Screen — now posting
-is one tap, type your message, done.
+**Make it a one-tap app (recommended).** In Safari on iPhone, open the
+address above, tap the **Share** button, then **"Add to Home Screen"**.
+You get an icon called *Board* that opens straight to the form with no
+browser chrome around it. On Android, the same thing lives under Chrome's
+**⋮** menu as **"Add to Home screen"**. This is the easiest way to use
+the board day to day.
+
+**Or a Shortcut that skips the form entirely** (iPhone, optional): open
+the **Shortcuts** app → tap **+** → add an **"Ask for Text"** action →
+add **"Get Contents of URL"** below it, set the URL to
+`http://raspberrypi.local:8000/message`, method **POST**, request body
+**JSON**, with one field `text` whose value is the **"Provided Input"**
+variable from the Ask for Text step (pick it from the variable bar — don't
+type it literally). Name it "Post to Board" and add it to your Home
+Screen. Now it's one tap → type → done, no page load at all. You can also
+say "Hey Siri, Post to Board".
+
+**Quiet hours**: between **8pm and 7am** the board goes dark and silent on
+purpose (there's an infant in the house). Messages you post still queue up
+and appear after 7am. A pinned message is the one exception — it will show
+during quiet hours, though still at zero brightness, so in practice the
+board stays dark until morning either way.
 
 ## What's here
 
@@ -204,6 +222,61 @@ rm service/flipboard.db
 
 If a port is stuck or a server won't start, see **Troubleshooting**
 below.
+
+## Running it on the Raspberry Pi
+
+This is the real deployment — the Pi boots straight into the board with no
+keyboard, no login, and no terminal. It's deliberately different from the
+dev setup above: **there is no Vite dev server in production.** `npm run
+build` emits a static bundle to `dist/`, and the FastAPI service serves it,
+so the whole board is one process on one port.
+
+**First-time setup**, once the Pi has Node 18+, Python 3.11+, and this repo
+in `~/flipboard`:
+
+```bash
+cd ~/flipboard
+python3 -m venv .venv && .venv/bin/pip install -r service/requirements.txt
+npm install
+./deploy/install.sh
+```
+
+`install.sh` builds the renderer, installs a `systemctl --user` unit, and
+appends the kiosk launcher to labwc's autostart. It needs no `sudo`, and
+it's safe to re-run. Reboot to confirm the board comes back on its own.
+
+**After changing code** (from your laptop):
+
+```bash
+rsync -az --exclude node_modules --exclude .venv --exclude dist \
+  --exclude '__pycache__' --exclude service/flipboard.db \
+  ./ pi-user@raspberrypi.local:~/flipboard/
+ssh pi-user@raspberrypi.local 'cd ~/flipboard && npm run build && systemctl --user restart flipboard'
+```
+
+**Day-to-day commands on the Pi:**
+
+```bash
+systemctl --user status flipboard     # is it up?
+systemctl --user restart flipboard    # after a config or code change
+journalctl --user -u flipboard -f     # live logs
+ss -lptn 'sport = :8000'              # what is actually holding the port
+```
+
+**Forcing the board to stay lit through quiet hours** (for a demo, or
+while setting things up in the evening) — the service reads
+`FLIPBOARD_QUIET_HOURS=off`:
+
+```bash
+mkdir -p ~/.config/systemd/user/flipboard.service.d
+printf '[Service]\nEnvironment=FLIPBOARD_QUIET_HOURS=off\n' \
+  > ~/.config/systemd/user/flipboard.service.d/quiet-hours-off.conf
+systemctl --user daemon-reload && systemctl --user restart flipboard
+```
+
+To put the normal 8pm–7am window back, delete that one file and re-run the
+last line. Prefer this over editing `service/config.py`, which is a code
+change you then have to remember to revert.
 
 ## Testing locally in VS Code
 

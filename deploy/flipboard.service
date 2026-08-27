@@ -1,0 +1,28 @@
+# User-level systemd unit for the Pi (build plan §8: "survives a power cycle,
+# comes back up on its own showing the board, no keyboard attached").
+#
+# Deliberately a --user unit, not a system one: Raspberry Pi OS autologins to
+# the desktop session, the kiosk browser has to live in that session anyway,
+# and installing here needs no root. Install with deploy/install.sh.
+#
+#   systemctl --user status flipboard      # is it up
+#   systemctl --user restart flipboard     # after a code change
+#   journalctl --user -u flipboard -f      # live logs
+
+[Unit]
+Description=flipboard service (API + board renderer)
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/flipboard
+ExecStart=%h/flipboard/.venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=2
+
+# Uncomment to force the board to stay lit through the 20:00-07:00 quiet-hours
+# window (see service/config.py). Restart the unit after changing this.
+# Environment=FLIPBOARD_QUIET_HOURS=off
+
+[Install]
+WantedBy=default.target
