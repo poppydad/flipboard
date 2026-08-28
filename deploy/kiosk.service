@@ -1,0 +1,30 @@
+# The kiosk browser, as a systemd --user unit.
+#
+# This was originally a line in ~/.config/labwc/autostart, which does not
+# work on Raspberry Pi OS: the session pins /etc/xdg/labwc/autostart (the one
+# that starts wf-panel-pi and pcmanfm-pi) and never reads the user's copy, so
+# the kiosk silently never launched — the service came back after a reboot
+# and the screen sat on the desktop. A unit is better anyway: real logs via
+# journalctl, and a restart if Chromium ever dies.
+#
+#   systemctl --user status kiosk
+#   journalctl --user -u kiosk -f
+#   systemctl --user stop kiosk     # to get the desktop back for a while
+
+[Unit]
+Description=flipboard kiosk browser
+After=flipboard.service
+Wants=flipboard.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Set explicitly rather than relying on the session having imported it into
+# the systemd user environment — at boot this unit can start first.
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=%h/flipboard/deploy/kiosk.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
