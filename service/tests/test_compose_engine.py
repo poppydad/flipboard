@@ -217,3 +217,65 @@ def test_decode_of_a_pure_chip_pattern_is_empty_not_garbage():
     # Chips have no character form. Callers show "(pattern)" for this.
     red = next(f.code for f in CHARSET.flaps if f.type == "chip" and f.color == "#C0392B")
     assert _decode_text([red] * (ROWS * COLS)) == ""
+
+
+# --- art (chip drawing) --------------------------------------------------
+
+
+def test_art_row_of_the_wrong_width_is_rejected_not_silently_shifted():
+    import pytest
+
+    from service.compose.art import from_rows
+
+    rows = ["." * COLS] * ROWS
+    rows[2] = "." * (COLS - 1)  # one short — a typo, not a rendering bug
+    with pytest.raises(ValueError, match="row 2"):
+        from_rows(rows)
+
+
+def test_art_with_the_wrong_number_of_rows_is_rejected():
+    import pytest
+
+    from service.compose.art import from_rows
+
+    with pytest.raises(ValueError, match="rows"):
+        from_rows(["." * COLS] * (ROWS - 1))
+
+
+def test_unknown_palette_key_names_itself():
+    import pytest
+
+    from service.compose.art import from_rows
+
+    rows = ["." * COLS] * ROWS
+    rows[0] = "Z" + "." * (COLS - 1)
+    with pytest.raises(ValueError, match="'Z'"):
+        from_rows(rows)
+
+
+def test_caption_clears_its_row_before_writing():
+    from service.compose.art import PALETTE, caption, from_rows
+
+    solid = from_rows(["R" * COLS] * ROWS)
+    out = caption(solid, "HI", 3)
+    row = out[3 * COLS : 4 * COLS]
+    assert PALETTE["R"] not in row  # the art underneath is gone, not blended
+    assert "".join(CHARSET.char_for(c) or " " for c in row).strip() == "HI"
+
+
+def test_caption_leaves_the_other_rows_alone():
+    from service.compose.art import PALETTE, caption, from_rows
+
+    solid = from_rows(["R" * COLS] * ROWS)
+    out = caption(solid, "HI", 3)
+    for r in (0, 1, 2, 4, 5):
+        assert set(out[r * COLS : (r + 1) * COLS]) == {PALETTE["R"]}
+
+
+def test_caption_row_outside_the_board_is_rejected():
+    import pytest
+
+    from service.compose.art import caption, from_rows
+
+    with pytest.raises(ValueError):
+        caption(from_rows(["." * COLS] * ROWS), "HI", ROWS)

@@ -1,0 +1,184 @@
+"""
+holiday channel (an addition to build plan §11): a greeting and a piece of
+chip art on the day of each of six Indian festivals.
+
+**Dates are a baked-in table, not a live lookup.** These are lunar and move
+every year, so they can't be computed from the Gregorian date, but they are
+also published years ahead — and the one morning this channel matters is
+exactly the morning you don't want a network hiccup to lose. The table came
+from Google's public Indian-holidays iCal feed
+(`en.indian#holiday@group.v.calendar.google.com`), which is free and
+keyless if it ever needs regenerating, and itself only runs to 2031.
+
+**It runs out after 2031.** `run()` then simply posts nothing, every day,
+silently — which is the safe failure but not an obvious one. If the board
+stops greeting anyone, look here first.
+
+On the art: the board is 6 rows of 22 flat-coloured cells, so these are
+silhouettes read from across a room, not pictures. They're deliberately
+symbols rather than figures — a lamp, a thread, a trident, a sweet — both
+because a deity rendered in 132 squares would look crude, and because
+symbols survive the resolution.
+"""
+from __future__ import annotations
+
+from datetime import date, datetime, time
+
+from ..compose.art import caption, from_rows
+from .base import Channel, ChannelMessage
+
+# --- the art ------------------------------------------------------------
+# Each is six rows of exactly 22 palette keys (see compose/art.py):
+#   . blank   R red   O orange   Y yellow   G green   B blue   V violet
+# One row in each is left blank for the caption to land on.
+
+# A row of four diyas: yellow flame, orange bowl, red base.
+_DIWALI = [
+    "......................",
+    "......................",  # caption
+    "......................",
+    "...Y....Y....Y....Y...",
+    "..OOO..OOO..OOO..OOO..",
+    "..RRR..RRR..RRR..RRR..",
+]
+
+# Thrown colour, thinning out around the greeting.
+_HOLI = [
+    "..R...Y....G...V...B..",
+    "....O....B....R....V..",
+    "......................",  # caption
+    "..V....G....Y....O....",
+    "...Y...V....O...G.....",
+    "..B....R....G....Y....",
+]
+
+# The rakhi itself: a thread across the board, knotted at a flower.
+_RAKHI = [
+    "......................",
+    "......................",  # caption
+    ".........V.V..........",
+    "RRRRRRRRRVYVRRRRRRRRRR",
+    ".........V.V..........",
+    "......................",
+]
+
+# A modak — the sweet, not the deity.
+_GANESH = [
+    "......................",
+    "......................",  # caption
+    "..........YY..........",
+    "........YYYYYY........",
+    ".......YYYYYYYY.......",
+    "......OOOOOOOOOO......",
+]
+
+# Durga's trishul.
+_DURGA = [
+    "........Y.Y.Y.........",
+    "........YYYYY.........",
+    "..........R...........",
+    "..........R...........",
+    "..........R...........",
+    "......................",  # caption
+]
+
+# Rama's bow, drawn and pointing right.
+_DUSSEHRA = [
+    ".......YY.............",
+    "......Y...............",
+    ".....YRRRRRRRRRRW.....",
+    "......Y...............",
+    ".......YY.............",
+    "......................",  # caption
+]
+
+# name -> (art rows, caption row, greeting)
+_FESTIVALS: dict[str, tuple[list[str], int, str]] = {
+    "DIWALI": (_DIWALI, 1, "HAPPY DIWALI"),
+    "HOLI": (_HOLI, 2, "HAPPY HOLI"),
+    "RAKHI": (_RAKHI, 1, "RAKSHA BANDHAN"),
+    "GANESH": (_GANESH, 1, "GANESH CHATURTHI"),
+    "DURGA": (_DURGA, 5, "DURGA PUJA"),
+    "DUSSEHRA": (_DUSSEHRA, 5, "DUSSEHRA"),
+}
+
+# Dates from Google's public Indian-holidays iCal feed; see the module note.
+_DATES: list[tuple[date, str]] = [
+    (date(2026, 3, 4), "HOLI"),
+    (date(2026, 8, 28), "RAKHI"),
+    (date(2026, 9, 14), "GANESH"),
+    (date(2026, 10, 17), "DURGA"),
+    (date(2026, 10, 20), "DUSSEHRA"),
+    (date(2026, 11, 8), "DIWALI"),
+    (date(2027, 3, 22), "HOLI"),
+    (date(2027, 8, 17), "RAKHI"),
+    (date(2027, 9, 4), "GANESH"),
+    (date(2027, 10, 5), "DURGA"),
+    (date(2027, 10, 9), "DUSSEHRA"),
+    (date(2027, 10, 29), "DIWALI"),
+    (date(2028, 3, 11), "HOLI"),
+    (date(2028, 8, 5), "RAKHI"),
+    (date(2028, 8, 23), "GANESH"),
+    (date(2028, 9, 24), "DURGA"),
+    (date(2028, 9, 27), "DUSSEHRA"),
+    (date(2028, 10, 17), "DIWALI"),
+    (date(2029, 3, 1), "HOLI"),
+    (date(2029, 8, 23), "RAKHI"),
+    (date(2029, 9, 11), "GANESH"),
+    (date(2029, 10, 12), "DURGA"),
+    (date(2029, 10, 16), "DUSSEHRA"),
+    (date(2029, 11, 5), "DIWALI"),
+    (date(2030, 3, 20), "HOLI"),
+    (date(2030, 8, 13), "RAKHI"),
+    (date(2030, 9, 1), "GANESH"),
+    (date(2030, 10, 2), "DURGA"),
+    (date(2030, 10, 6), "DUSSEHRA"),
+    (date(2030, 10, 26), "DIWALI"),
+    (date(2031, 3, 9), "HOLI"),
+    (date(2031, 8, 2), "RAKHI"),
+    (date(2031, 9, 20), "GANESH"),
+    (date(2031, 10, 21), "DURGA"),
+    (date(2031, 10, 25), "DUSSEHRA"),
+    (date(2031, 11, 14), "DIWALI"),
+]
+
+_BY_DATE: dict[date, str] = {when: name for when, name in _DATES}
+
+LAST_KNOWN_YEAR = max(when.year for when, _ in _DATES)
+
+
+def _today() -> date:
+    # Wrapper so tests can pin the day — date is an immutable C type and
+    # its .today() can't be patched in place. Same approach as f1/mufc.
+    return date.today()
+
+
+def build(name: str) -> list[int]:
+    """The finished grid for one festival. Public so tests and any future
+    'preview a festival' endpoint don't have to reach through run()."""
+    rows, caption_row, greeting = _FESTIVALS[name]
+    return caption(from_rows(rows), greeting, caption_row)
+
+
+def run() -> ChannelMessage | None:
+    today = _today()
+    name = _BY_DATE.get(today)
+    if name is None:
+        return None
+
+    # Expires at midnight: a festival greeting is for the day, and leaving
+    # it in the rotation afterwards is how f1's countdown ended up owning
+    # the board for a week.
+    midnight = datetime.combine(today, time.max)
+
+    return ChannelMessage(
+        grid=build(name),
+        priority=10,  # goes first among the day's new messages, but still rotates
+        dwell_seconds=300,
+        expires_at=midnight.timestamp(),
+    )
+
+
+# 07:30 — after quiet hours lift at 07:00, so the greeting is already up
+# when the house comes downstairs.
+CHANNEL = Channel(name="holiday", cron="30 7 * * *", run=run)

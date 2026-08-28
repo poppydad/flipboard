@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 129/129 passing
+.venv/bin/python -m pytest service/tests/   # 159/159 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -330,6 +330,34 @@ falling back to `banner` per §11) and let `/compose/smart` try that
 first, falling back to this heuristic version, not replace it — the
 heuristic path costs nothing and needs no network, so it's worth
 keeping as the fallback rather than deleting once Claude is wired in.
+
+## The holiday channel and `compose/art.py`
+
+Six Indian festivals, each with a greeting and chip art, on the day.
+
+- **The festival dates are a baked-in table, not a fetch.** They're
+  lunar, so they can't be computed, but they're published years ahead —
+  and the one morning this channel matters is exactly the morning you
+  don't want a network hiccup to eat. The table came from Google's public
+  Indian-holidays iCal feed (free, keyless) and covers 2026–2031;
+  `holiday.py`'s docstring says how to regenerate it. **After 2031 the
+  channel goes quiet with no error** — `test_the_table_has_not_silently_run_out`
+  is the tripwire.
+- **Art is written as literal rows of palette keys**, one character per
+  cell, so the source looks like the output:
+  `"..OOO..OOO..OOO..OOO.."`. A grid built by index arithmetic can't be
+  reviewed by reading it. `from_rows` is strict about row count and width
+  precisely because a row one character short would shift everything
+  below it and look like a renderer bug rather than a typo.
+- **Symbols, not figures.** A diya, a thread, a trident, a modak — not
+  deities. 132 flat cells can't render a figure without it looking crude,
+  and these are religious festivals.
+- **`caption()` clears its row before writing** rather than compositing,
+  so the greeting always sits on unlit cells no matter how busy the art
+  is around it.
+- **These messages set `expires_at` (midnight)** — the only channel that
+  does. Worth copying: channel messages that never expire are what let
+  f1's countdown sit on the board for a week.
 
 ## mufc: ESPN's public API, no key after all
 

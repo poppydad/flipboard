@@ -5,8 +5,8 @@ tiles that flip through letters/numbers/colors one at a time to spell out a
 message, the same mechanism as an old airport departure board (this project
 replaces a $3,400 commercial one, a "Vestaboard," with a Raspberry Pi and a
 screen). See `flipboard-build-plan-v2.md` for the full plan — this repo
-covers **Phase 0** through **Phase 3**, plus 4 of 6 **Phase 4** channels
-(milestone, weather, f1, mufc) and the scheduler/quiet-hours infrastructure they
+covers **Phase 0** through **Phase 3**, plus 4 of 6 **Phase 4** channels and a holiday channel
+(milestone, weather, f1, mufc) plus holiday, and the scheduler/quiet-hours infrastructure they
 run on — see "Channels and quiet hours" below.
 
 If you just want to **put a message on a board someone else already set
@@ -102,17 +102,19 @@ service/                  FastAPI + SQLite. LAN only, no auth.
                            GET /compose/grid
   db.py                    SQLite schema (messages, display_log, settings)
   compose/                 The layout engine — normalize/wrap/align/render/
-                           templates. See "The layout engine" below.
+                           templates, plus art.py for colour-chip drawing.
+                           See "The layout engine" below.
   selection.py             Deterministic pick: pinned first, then round-robin by
                            least-recently-shown, priority breaking ties
   config.py                is_quiet_hours() — see "Channels and quiet hours"
   settings.py              Runtime settings that survive a restart (quiet-hours snooze)
   messages.py              create_message(): shared by POST /message and channels;
                            validate_grid(): the POST /message/grid boundary check
-  channels/                Scheduler + plugin interface + milestone/weather/f1/mufc
+  channels/                Scheduler + plugin interface + milestone/weather/f1/
+                           mufc/holiday
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   129 pytest tests
+  tests/                   159 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -602,6 +604,11 @@ no special-casing required.
   into multiple linked grids instead of dropping it.
 - **templates** — `banner`, `stat`, `list`, `countdown`, `chips` (a solid
   color-chip border framing centered text).
+- **art** — colour-chip drawing. Art is written as literal rows of
+  single-character palette keys, so the source looks like what it
+  renders; `caption()` lays a centred line of text over one row. Used by
+  the holiday channel. At 6×22 flat cells this is closer to cross-stitch
+  than drawing — silhouettes read, detail doesn't.
 
 ## Channels and quiet hours
 
@@ -611,7 +618,7 @@ or `None` (nothing to post this cycle), appended to `CHANNELS`. The
 scheduler (APScheduler, in-process) handles the rest, gating every
 channel on quiet hours before it even runs.
 
-Four of six are built:
+Four of six are built, plus one that wasn't in the plan:
 
 - **milestone** — a days-old counter (`banner`), 8:00am daily. No
   external API, just a reference date.
@@ -626,6 +633,14 @@ Four of six are built:
 - **mufc** — countdown to the next Manchester United fixture, the
   scoreline for a couple of days after one finishes, via ESPN's public
   site API (free, keyless). Hourly poll, same reasoning as f1.
+- **holiday** — a greeting and a piece of colour-chip art on the day of
+  six Indian festivals: Holi, Raksha Bandhan, Ganesh Chaturthi, Durga
+  Puja, Dussehra and Diwali. Diwali gets a row of diyas, Holi a scatter
+  of thrown colour, Rakhi a thread knotted at a flower. Runs at 7:30am,
+  just after quiet hours lift, and the greeting expires at midnight so
+  it doesn't linger. These dates are lunar and move every year, so they
+  come from a baked-in table (2026–2031) rather than a live lookup —
+  see `service/channels/holiday.py` for how to regenerate it.
 
 calendar and markets aren't built — each needs something this repo
 doesn't have on its own: calendar OAuth or an ICS feed URL, or a stock
