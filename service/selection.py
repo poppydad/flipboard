@@ -109,10 +109,24 @@ class Selector:
         pinned = [r for r in candidates if r["pinned"]]
         pool = pinned if pinned else candidates
 
+        # Round-robin, with priority as the tie-break — NOT the other way round.
+        #
+        # Sorting by priority first meant the lowest number owned the board
+        # outright: an f1 countdown (priority 15, no expiry) beat weather,
+        # milestone, and every message posted from a phone at every single
+        # reselection, for the ten days until the race. Nothing rotated. The
+        # queue was full and the board was stuck on one grid.
+        #
+        # Least-recently-shown first gives everything airtime, and priority
+        # still decides who goes first among messages that are equally stale —
+        # which in practice is the never-shown ones, so a new high-priority
+        # channel post still lands ahead of an older manual one. "Show this
+        # right now, ahead of everything" is what pinned is for.
+        #
         # last_shown is an epoch float (or NULL for "never shown") — an explicit
         # Python-side timestamp, not SQLite's CURRENT_TIMESTAMP, which only has
         # 1-second resolution and made rapid reselections (e.g. paginated
         # messages cycling via /next) tie and silently favor the lower id.
         never_shown = -1.0
-        pool.sort(key=lambda r: (r["priority"], r["last_shown"] if r["last_shown"] is not None else never_shown))
+        pool.sort(key=lambda r: (r["last_shown"] if r["last_shown"] is not None else never_shown, r["priority"]))
         return pool[0]

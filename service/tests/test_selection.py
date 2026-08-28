@@ -43,6 +43,27 @@ def test_picks_lowest_priority_number(conn):
     assert row["id"] == low_prio_wins
 
 
+def test_high_priority_message_does_not_monopolize_the_board(conn):
+    # Regression, found live on the Pi: sorting by priority *before*
+    # last_shown meant the lowest priority number won every reselection
+    # forever. An f1 countdown (priority 15, no expiry) sat on the board for
+    # the ten days until the race while weather, milestone, and everything
+    # posted from a phone stayed invisible — the queue was full and nothing
+    # rotated. Priority now decides who goes first, not who owns the board.
+    important = insert(conn, priority=10, dwell_seconds=0)
+    ordinary = insert(conn, priority=50, dwell_seconds=0)
+    selector = Selector()
+
+    first = selector.current(conn)
+    assert first["id"] == important  # still goes first: both are never-shown
+
+    second = selector.current(conn, force=True)
+    assert second["id"] == ordinary  # ...but does not get to stay
+
+    third = selector.current(conn, force=True)
+    assert third["id"] == important  # and it comes back round
+
+
 def test_pinned_beats_lower_priority_number(conn):
     insert(conn, priority=0)  # would win on priority alone
     pinned_id = insert(conn, priority=99, pinned=True)
