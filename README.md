@@ -5,8 +5,8 @@ tiles that flip through letters/numbers/colors one at a time to spell out a
 message, the same mechanism as an old airport departure board (this project
 replaces a $3,400 commercial one, a "Vestaboard," with a Raspberry Pi and a
 screen). See `flipboard-build-plan-v2.md` for the full plan — this repo
-covers **Phase 0** through **Phase 3**, plus 3 of 6 **Phase 4** channels
-(milestone, weather, f1) and the scheduler/quiet-hours infrastructure they
+covers **Phase 0** through **Phase 3**, plus 4 of 6 **Phase 4** channels
+(milestone, weather, f1, mufc) and the scheduler/quiet-hours infrastructure they
 run on — see "Channels and quiet hours" below.
 
 If you just want to **put a message on a board someone else already set
@@ -109,10 +109,10 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   settings.py              Runtime settings that survive a restart (quiet-hours snooze)
   messages.py              create_message(): shared by POST /message and channels;
                            validate_grid(): the POST /message/grid boundary check
-  channels/                Scheduler + plugin interface + milestone/weather/f1
+  channels/                Scheduler + plugin interface + milestone/weather/f1/mufc
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   110 pytest tests
+  tests/                   129 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -611,7 +611,7 @@ or `None` (nothing to post this cycle), appended to `CHANNELS`. The
 scheduler (APScheduler, in-process) handles the rest, gating every
 channel on quiet hours before it even runs.
 
-Three of six are built:
+Four of six are built:
 
 - **milestone** — a days-old counter (`banner`), 8:00am daily. No
   external API, just a reference date.
@@ -623,10 +623,14 @@ Three of six are built:
   keyless). Polls hourly and decides for itself whether there's
   anything worth posting — "race weekend" isn't a fixed schedule, so
   the cron is just a polling cadence.
+- **mufc** — countdown to the next Manchester United fixture, the
+  scoreline for a couple of days after one finishes, via ESPN's public
+  site API (free, keyless). Hourly poll, same reasoning as f1.
 
-calendar, mufc, and markets aren't built — each needs something this
-repo doesn't have on its own: calendar OAuth or an ICS feed URL, a
-football data API key, or a stock watchlist.
+calendar and markets aren't built — each needs something this repo
+doesn't have on its own: calendar OAuth or an ICS feed URL, or a stock
+watchlist. mufc was on that list too, on the assumption it needed a
+football-data.org key; ESPN's public API turned out to need nothing.
 
 Quiet hours is fully wired regardless of which channels exist:
 `service/config.py`'s `is_quiet_hours()` (8:00pm–7:00am, the
@@ -649,8 +653,8 @@ sometimes better.
 
 ## Next
 
-calendar, mufc, and markets, once there's an ICS feed/API key/watchlist
-to build them against. `/compose/smart` could later get an actual Claude
+calendar and markets, once there's an ICS feed or a watchlist to build
+them against. `/compose/smart` could later get an actual Claude
 call as a first-choice picker (per §11, "probe 7" — not yet run since it
 needs a paid `ANTHROPIC_API_KEY`), falling back to the heuristic version
 above rather than replacing it.

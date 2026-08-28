@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 106/106 passing
+.venv/bin/python -m pytest service/tests/   # 129/129 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -330,6 +330,29 @@ falling back to `banner` per §11) and let `/compose/smart` try that
 first, falling back to this heuristic version, not replace it — the
 heuristic path costs nothing and needs no network, so it's worth
 keeping as the fallback rather than deleting once Claude is wired in.
+
+## mufc: ESPN's public API, no key after all
+
+The build plan blocked this channel on a football-data.org key. It needs
+nothing — `site.api.espn.com` is free and keyless, like Open-Meteo and
+OpenF1 before it. Worth checking for the remaining channels too before
+asking for credentials.
+
+- **Two endpoints, not one.** The bare team schedule returns matches
+  *already played*; `?fixture=true` returns the ones to come. Neither
+  gives both, which is why `_events(fixtures=)` exists.
+- **Scores come back as `{"value": 2.0, "displayValue": "2"}`.**
+  `_score()` returns an `int`, deliberately: comparing the display
+  strings makes `"10" > "9"` False (a 10-9 win would have printed LOST),
+  and `str(2.0)` would have put "2.0" on the board.
+- **`countdown_parts()` in `base.py` is shared with f1** and exists
+  because both printed "1 DAYS". The unit gets a whole 22-column row, so
+  the plural is not cosmetic. Floors to the largest whole unit, matching
+  f1's existing convention.
+- Team id 360 under `eng.1`; the team schedule spans every competition,
+  not just the league. `_US` matches on ESPN's `shortDisplayName`
+  ("Man United") — if that string ever changes, `_parse` returns None and
+  the channel goes quiet rather than posting something wrong.
 
 ## Selection rotates; priority is a tie-break, not a ranking
 

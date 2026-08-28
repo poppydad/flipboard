@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from ..compose.templates import countdown, list_template
-from .base import Channel, ChannelMessage
+from .base import Channel, ChannelMessage, countdown_parts
 from .http import get_json
 
 _BASE = "https://api.openf1.org/v1"
@@ -62,11 +62,7 @@ def _countdown_message(session: dict, now: datetime) -> ChannelMessage | None:
     if remaining > _COUNTDOWN_HORIZON:
         return None
 
-    if remaining.days >= 1:
-        number, unit = str(remaining.days), "DAYS"
-    else:
-        number, unit = str(remaining.seconds // 3600), "HOURS"
-
+    number, unit = countdown_parts(remaining)
     grid = countdown("LIGHTS OUT", number, unit)
     return ChannelMessage(grid=grid, priority=15, dwell_seconds=300)
 
