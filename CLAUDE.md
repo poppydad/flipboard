@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 98/98 passing
+.venv/bin/python -m pytest service/tests/   # 106/106 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -103,8 +103,10 @@ service/
   main.py          FastAPI app: GET /current, POST /message, GET /queue,
                     DELETE /queue/{id}, POST /next, GET /compose
   db.py             SQLite schema (messages, display_log) + connection helper
-  selection.py       Selector: pinned wins, else lowest priority, ties to
-                    least-recently-shown, holds dwell_seconds before reselecting
+  selection.py       Selector: pinned wins, else round-robin by
+                    least-recently-shown (priority breaks ties, it does NOT
+                    outrank — see the monopoly bug below), holds
+                    dwell_seconds before reselecting
   web/compose.html   phone-friendly form, no framework, fetch() POSTs JSON
   requirements.txt / requirements-dev.txt
   tests/             pytest, 65 tests — see "What Phase 3 actually built"
@@ -328,6 +330,27 @@ falling back to `banner` per §11) and let `/compose/smart` try that
 first, falling back to this heuristic version, not replace it — the
 heuristic path costs nothing and needs no network, so it's worth
 keeping as the fallback rather than deleting once Claude is wired in.
+
+## Selection rotates; priority is a tie-break, not a ranking
+
+Found on the live board. `_pick` used to sort by `(priority, last_shown)`,
+so the lowest priority number won every reselection for as long as it
+stayed eligible. f1 posts a countdown at priority 15 with no `expires_at`,
+so "LIGHTS OUT / 10 DAYS" owned the display and weather (25), milestone
+(30) and every phone message (50) were invisible — for the ten days until
+the race. `POST /next` returned the same id every time; the queue was full
+and nothing moved.
+
+Now `(last_shown, priority)`. Everything gets airtime; priority still
+orders messages that are equally stale, which in practice means the
+never-shown ones, so a fresh channel post still lands ahead of an older
+manual message. Preempting everything *now* is what `pinned` is for, and
+that path is untouched. Regression test:
+`test_high_priority_message_does_not_monopolize_the_board`.
+
+Note this supersedes the older claim in the Phase 4 notes that "one live
+f1 message still legitimately preempts a manual one" — true of the
+original design, and the reason the board sat on one grid for a day.
 
 ## Running on the real Pi (`deploy/`)
 
