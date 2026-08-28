@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 159/159 passing
+.venv/bin/python -m pytest service/tests/   # 175/175 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -333,7 +333,8 @@ keeping as the fallback rather than deleting once Claude is wired in.
 
 ## The holiday channel and `compose/art.py`
 
-Six Indian festivals, each with a greeting and chip art, on the day.
+Thirteen festivals, each with a greeting and chip art, on the day —
+Hindu, plus both Eids and Christmas.
 
 - **The festival dates are a baked-in table, not a fetch.** They're
   lunar, so they can't be computed, but they're published years ahead —
@@ -343,6 +344,10 @@ Six Indian festivals, each with a greeting and chip art, on the day.
   `holiday.py`'s docstring says how to regenerate it. **After 2031 the
   channel goes quiet with no error** — `test_the_table_has_not_silently_run_out`
   is the tripwire.
+- **The Eid dates are approximate.** They depend on an actual moon
+  sighting, which is why the feed marks future ones "(tentative)"; the
+  observed day can land either side of the table. Both Eids share one
+  crescent-and-star grid and one greeting.
 - **Art is written as literal rows of palette keys**, one character per
   cell, so the source looks like the output:
   `"..OOO..OOO..OOO..OOO.."`. A grid built by index arithmetic can't be

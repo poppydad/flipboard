@@ -28,6 +28,19 @@ def test_a_festival_day_posts_a_greeting(monkeypatch):
     assert "HAPPY DIWALI" in _text(holiday.run().grid)
 
 
+def test_the_two_eids_share_art_and_greeting(monkeypatch):
+    # Different dates, same crescent — the greeting doesn't distinguish them.
+    monkeypatch.setattr(holiday, "_today", lambda: date(2026, 3, 21))  # Eid al-Fitr
+    fitr = holiday.run().grid
+    monkeypatch.setattr(holiday, "_today", lambda: date(2026, 5, 28))  # Eid al-Adha
+    assert holiday.run().grid == fitr
+
+
+def test_a_non_hindu_festival_is_greeted_too(monkeypatch):
+    monkeypatch.setattr(holiday, "_today", lambda: date(2026, 12, 25))
+    assert "MERRY CHRISTMAS" in _text(holiday.run().grid)
+
+
 def test_an_ordinary_day_posts_nothing(monkeypatch):
     monkeypatch.setattr(holiday, "_today", lambda: date(2026, 11, 9))
     assert holiday.run() is None
@@ -41,7 +54,7 @@ def test_every_festival_in_the_table_can_actually_be_built():
         holiday.build(name)
 
 
-def test_all_six_festivals_are_covered_every_year():
+def test_every_festival_is_covered_every_year():
     by_year: dict[int, set[str]] = {}
     for when, name in holiday._DATES:
         by_year.setdefault(when.year, set()).add(name)

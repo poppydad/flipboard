@@ -114,7 +114,7 @@ service/                  FastAPI + SQLite. LAN only, no auth.
                            mufc/holiday
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   159 pytest tests
+  tests/                   175 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -634,13 +634,16 @@ Four of six are built, plus one that wasn't in the plan:
   scoreline for a couple of days after one finishes, via ESPN's public
   site API (free, keyless). Hourly poll, same reasoning as f1.
 - **holiday** — a greeting and a piece of colour-chip art on the day of
-  six Indian festivals: Holi, Raksha Bandhan, Ganesh Chaturthi, Durga
-  Puja, Dussehra and Diwali. Diwali gets a row of diyas, Holi a scatter
-  of thrown colour, Rakhi a thread knotted at a flower. Runs at 7:30am,
-  just after quiet hours lift, and the greeting expires at midnight so
-  it doesn't linger. These dates are lunar and move every year, so they
-  come from a baked-in table (2026–2031) rather than a live lookup —
-  see `service/channels/holiday.py` for how to regenerate it.
+  thirteen festivals: Pongal, Holi, both Eids, Raksha Bandhan, Onam,
+  Janmashtami, Ganesh Chaturthi, Navratri, Durga Puja, Dussehra, Diwali
+  and Christmas. Diwali gets a row of diyas, Holi a scatter of thrown
+  colour, Onam a pookalam, Eid a crescent and star, Christmas a tree.
+  Runs at 7:30am, just after quiet hours lift, and the greeting expires
+  at midnight so it doesn't linger. Most of these dates are lunar and
+  move every year, so they come from a baked-in table (2026–2031)
+  rather than a live lookup — see `service/channels/holiday.py` for how
+  to regenerate it. The two Eid dates depend on a moon sighting and can
+  land a day either side of the table.
 
 calendar and markets aren't built — each needs something this repo
 doesn't have on its own: calendar OAuth or an ICS feed URL, or a stock
