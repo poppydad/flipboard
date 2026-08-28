@@ -32,6 +32,7 @@ _RESULTS_WINDOW = timedelta(days=2)  # how long a finished result stays postable
 _COUNTDOWN_HORIZON = timedelta(days=10)  # don't count down from further out than this
 
 _US = "Man United"  # ESPN's shortDisplayName for the team itself
+_NAME = "MUFC"  # what the board calls us
 
 
 def _now() -> datetime:
@@ -88,10 +89,14 @@ def _countdown_message(now: datetime) -> ChannelMessage | None:
     if remaining > _COUNTDOWN_HORIZON:
         return None
 
-    # "V ARSENAL" / "AT ARSENAL" reads as the fixture rather than a bare
-    # team name, and stays inside one row for every Premier League club.
-    prefix = "V" if us.get("homeAway") == "home" else "AT"
-    label = f"{prefix} {_opponent(them)}"[:COLS]
+    # Name both sides — "MUFC VS IPSWICH" reads as a fixture, where a bare
+    # "VS IPSWICH" makes you supply the other half yourself. VS/AT still
+    # carries home or away. If a long opponent pushes this past one row,
+    # drop our own name rather than truncating theirs mid-word.
+    prefix = "VS" if us.get("homeAway") == "home" else "AT"
+    label = f"{_NAME} {prefix} {_opponent(them)}"
+    if len(label) > COLS:
+        label = f"{prefix} {_opponent(them)}"[:COLS]
 
     number, unit = countdown_parts(remaining)
     return ChannelMessage(grid=countdown(label, number, unit), priority=20, dwell_seconds=300)
@@ -145,8 +150,8 @@ def _results_message(now: datetime) -> ChannelMessage | None:
         verdict = "DREW"
 
     # stat() puts each field on its own fixed row, so keep the scoreline to
-    # one: "UNITED 2-1 ARSENAL" is 19 of the 22 columns at worst.
-    line = f"UNITED {ours}-{theirs} {_opponent(them)}"[:COLS]
+    # one: "MUFC 2-1 ARSENAL" leaves room for the longer club names.
+    line = f"{_NAME} {ours}-{theirs} {_opponent(them)}"[:COLS]
     return ChannelMessage(grid=stat(verdict, line), priority=20, dwell_seconds=300)
 
 

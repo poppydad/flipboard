@@ -56,7 +56,7 @@ def api(monkeypatch):
 def test_days_out_counts_down_in_days(api):
     api["fixtures"] = [_event(NOW + timedelta(days=3, hours=4), "Arsenal")]
     text = _decode(mufc.run().grid)
-    assert "V ARSENAL" in text
+    assert "MUFC VS ARSENAL" in text
     assert "3" in text and "DAYS" in text
 
 
@@ -71,7 +71,7 @@ def test_exactly_one_day_is_singular(api):
 
 def test_away_fixture_says_at_not_v(api):
     api["fixtures"] = [_event(NOW + timedelta(days=2), "Everton", home=False)]
-    assert "AT EVERTON" in _decode(mufc.run().grid)
+    assert "MUFC AT EVERTON" in _decode(mufc.run().grid)
 
 
 def test_hours_when_kickoff_is_today(api):
@@ -107,7 +107,7 @@ def test_recent_win_shows_the_scoreline(api):
     ]
     text = _decode(mufc.run().grid)
     assert "WON" in text
-    assert "UNITED 2-1 ARSENAL" in text
+    assert "MUFC 2-1 ARSENAL" in text
 
 
 def test_recent_loss_says_lost(api):
@@ -116,7 +116,7 @@ def test_recent_loss_says_lost(api):
     ]
     text = _decode(mufc.run().grid)
     assert "LOST" in text
-    assert "UNITED 0-2 HULL" in text
+    assert "MUFC 0-2 HULL" in text
 
 
 def test_draw_says_drew(api):
@@ -150,7 +150,7 @@ def test_a_stale_result_falls_through_to_the_countdown(api):
     ]
     api["fixtures"] = [_event(NOW + timedelta(days=4), "Everton")]
     text = _decode(mufc.run().grid)
-    assert "V EVERTON" in text
+    assert "MUFC VS EVERTON" in text
     assert "WON" not in text
 
 

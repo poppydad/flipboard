@@ -349,6 +349,10 @@ asking for credentials.
   because both printed "1 DAYS". The unit gets a whole 22-column row, so
   the plural is not cosmetic. Floors to the largest whole unit, matching
   f1's existing convention.
+- **The fixture line names both sides** — "MUFC VS IPSWICH", not
+  "VS IPSWICH", which reads like half a sentence. VS/AT still carries
+  home or away. A long opponent that would push past 22 columns drops
+  *our* name rather than truncating theirs mid-word.
 - Team id 360 under `eng.1`; the team schedule spans every competition,
   not just the league. `_US` matches on ESPN's `shortDisplayName`
   ("Man United") — if that string ever changes, `_parse` returns None and
