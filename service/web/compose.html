@@ -62,7 +62,7 @@
     border: 1px solid #444;
     color: #eee;
   }
-  #status, #unpinStatus { margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
+  #status, #unpinStatus, #quietStatus { margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
   .divider {
     margin-top: 2rem;
     padding-top: 1.5rem;
@@ -88,6 +88,12 @@
     <p>Pinned something and want it to rotate normally again?</p>
     <button id="unpinButton" type="button" class="secondary">Unpin current message</button>
     <div id="unpinStatus"></div>
+  </div>
+
+  <div class="divider">
+    <p id="quietState">Quiet hours…</p>
+    <button id="quietButton" type="button" class="secondary" hidden></button>
+    <div id="quietStatus"></div>
   </div>
 
   <div class="divider">
@@ -143,6 +149,63 @@
         button.disabled = false;
       }
     });
+    // --- quiet hours -------------------------------------------------
+    const quietState = document.getElementById("quietState");
+    const quietButton = document.getElementById("quietButton");
+    const quietStatus = document.getElementById("quietStatus");
+
+    function renderQuiet(s) {
+      if (!s.enabled) {
+        quietState.textContent =
+          "Quiet hours is switched off in the service settings.";
+        quietButton.hidden = true;
+        return;
+      }
+      if (s.snoozed) {
+        const t = new Date(s.snoozed_until).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+        quietState.textContent =
+          "Quiet hours paused — the board stays on until " + t + ".";
+        quietButton.textContent = "Resume quiet hours now";
+      } else {
+        quietState.textContent =
+          "Quiet hours: the board goes dark and silent " + s.window + ".";
+        quietButton.textContent = "Keep the board on until morning";
+      }
+      quietButton.dataset.snooze = s.snoozed ? "false" : "true";
+      quietButton.hidden = false;
+    }
+
+    async function loadQuiet() {
+      try {
+        renderQuiet(await fetch("/settings/quiet-hours").then((r) => r.json()));
+      } catch {
+        quietState.textContent = "Quiet hours: couldn't reach the board.";
+      }
+    }
+
+    quietButton.addEventListener("click", async () => {
+      quietButton.disabled = true;
+      quietStatus.textContent = "Saving…";
+      try {
+        const res = await fetch("/settings/quiet-hours", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ snooze: quietButton.dataset.snooze === "true" }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        renderQuiet(await res.json());
+        quietStatus.textContent = "Saved.";
+      } catch (err) {
+        quietStatus.textContent = "Failed: " + err.message;
+      } finally {
+        quietButton.disabled = false;
+      }
+    });
+
+    loadQuiet();
   </script>
 </body>
 </html>

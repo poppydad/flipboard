@@ -53,9 +53,14 @@ say "Hey Siri, Post to Board".
 
 **Quiet hours**: between **8pm and 7am** the board goes dark and silent on
 purpose (there's an infant in the house). Messages you post still queue up
-and appear after 7am. A pinned message is the one exception — it will show
-during quiet hours, though still at zero brightness, so in practice the
-board stays dark until morning either way.
+and appear after 7am.
+
+If you want the board to stay on past 8pm — guests over, a party, a late
+evening — the same page has a **"Keep the board on until morning"** button
+near the bottom. It suppresses quiet hours only until the next 7am and then
+lets it resume on its own, so the board can't be left glowing all night by
+someone who tapped it and went to bed. Tap **"Resume quiet hours now"** to
+end it early. The setting survives a restart of the board.
 
 ## What's here
 
@@ -84,19 +89,22 @@ renderer/                 Canvas 2D renderer. Consumes the engine, never the rev
 service/                  FastAPI + SQLite. LAN only, no auth.
   main.py                  GET /current, POST /message, POST /message/grid,
                            POST /compose/smart, GET /queue, DELETE /queue/{id},
-                           POST /queue/{id}/unpin, POST /next, GET /compose,
+                           POST /queue/{id}/unpin, POST /next,
+                           GET+POST /settings/quiet-hours, GET /compose,
                            GET /compose/grid
-  db.py                    SQLite schema (messages, display_log)
+  db.py                    SQLite schema (messages, display_log, settings)
   compose/                 The layout engine — normalize/wrap/align/render/
                            templates. See "The layout engine" below.
-  selection.py             Deterministic pick: pinned > priority > least-recently-shown
+  selection.py             Deterministic pick: pinned first, then round-robin by
+                           least-recently-shown, priority breaking ties
   config.py                is_quiet_hours() — see "Channels and quiet hours"
+  settings.py              Runtime settings that survive a restart (quiet-hours snooze)
   messages.py              create_message(): shared by POST /message and channels;
                            validate_grid(): the POST /message/grid boundary check
   channels/                Scheduler + plugin interface + milestone/weather/f1
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   82 pytest tests
+  tests/                   106 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal

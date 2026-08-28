@@ -367,6 +367,17 @@ deploy/
   (hence `pkill -x swayidle` + `wlopm --on`); and reusing the everyday
   Chromium profile means a crash-restore bubble can land on the board
   (hence a dedicated `--user-data-dir`).
+- **The phone form can snooze quiet hours, but only until morning.**
+  `POST /settings/quiet-hours {"snooze": true}` suppresses it until the
+  next `QUIET_HOURS_END` (07:00) and then lets it resume by itself;
+  there is deliberately no indefinite off-switch in the UI. The form is
+  the one place a half-asleep person will tap this, and a board left
+  bright all night is the exact failure quiet hours exists to prevent —
+  so the snooze targets a wall-clock time, not a duration. It lives in a
+  new `settings` table read through `service/settings.py`, which caches
+  in a module global because `is_quiet_hours()` runs on every
+  `GET /current`, i.e. every 5s per renderer; that cache leaks across
+  tests, hence the restoring fixture in `test_settings.py`.
 - **`FLIPBOARD_QUIET_HOURS=off` disables quiet hours entirely**
   (`service/config.py`, read once at import). This exists because the
   first live test happened at 9pm and the board was — correctly —

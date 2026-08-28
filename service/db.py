@@ -36,6 +36,15 @@ CREATE TABLE IF NOT EXISTS display_log (
 -- year, against a renderer that polls every 5s. With this index the same
 -- year's data selects in 34ms.
 CREATE INDEX IF NOT EXISTS idx_display_log_message_id ON display_log(message_id);
+
+-- Runtime settings that have to outlive a restart. Currently one key:
+-- quiet_hours_snooze_until, an epoch float set by the phone form's "keep the
+-- board on" button. CREATE ... IF NOT EXISTS plus executescript on every
+-- startup means an already-deployed database picks this up with no migration.
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
 """
 
 

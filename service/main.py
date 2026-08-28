@@ -20,9 +20,18 @@ from pydantic import BaseModel, Field
 from . import db
 from .channels.scheduler import start_scheduler, stop_scheduler
 from .compose import BLANK_GRID, CHARSET_VERSION, pick_smart_template
-from .config import BRIGHTNESS_NORMAL, BRIGHTNESS_QUIET_FLOOR, is_quiet_hours
+from .config import (
+    BRIGHTNESS_NORMAL,
+    BRIGHTNESS_QUIET_FLOOR,
+    QUIET_HOURS_ENABLED,
+    QUIET_HOURS_END,
+    QUIET_HOURS_START,
+    is_quiet_hours,
+    next_quiet_end,
+)
 from .messages import create_message, validate_grid
 from .selection import Selector
+from . import settings
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 # `npm run build` output. Present on the Pi (and any machine that has run the
@@ -36,6 +45,11 @@ selector = Selector()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init_db()
+    conn = db.get_connection()
+    try:
+        settings.load(conn)
+    finally:
+        conn.close()
     start_scheduler()
     yield
     stop_scheduler()
@@ -222,6 +236,46 @@ def unpin_queue_item(message_id: int):
     if cur.rowcount == 0:
         raise HTTPException(status_code=404, detail="message not found")
     return {"unpinned": message_id}
+
+
+class QuietHoursIn(BaseModel):
+    snooze: bool
+
+
+def _quiet_hours_state() -> dict:
+    until = settings.quiet_snooze_until()
+    now = datetime.now().timestamp()
+    active = until is not None and now < until
+    return {
+        "enabled": QUIET_HOURS_ENABLED,
+        "window": f"{QUIET_HOURS_START:%H:%M}-{QUIET_HOURS_END:%H:%M}",
+        "snoozed": active,
+        "snoozed_until": datetime.fromtimestamp(until).isoformat() if active else None,
+        "quiet_now": is_quiet_hours(),
+    }
+
+
+@app.get("/settings/quiet-hours")
+def get_quiet_hours():
+    return _quiet_hours_state()
+
+
+@app.post("/settings/quiet-hours")
+def set_quiet_hours(body: QuietHoursIn):
+    """Snooze quiet hours until the next 07:00, or cancel a snooze.
+
+    Deliberately not an indefinite off-switch: the phone form is the one
+    place a half-asleep person will tap this, and a board left bright all
+    night is the exact failure quiet hours exists to prevent. The snooze
+    expires on its own at the next natural wake time. For a permanent
+    override there's FLIPBOARD_QUIET_HOURS=off in the service environment.
+    """
+    conn = db.get_connection()
+    try:
+        settings.set_quiet_snooze(conn, next_quiet_end().timestamp() if body.snooze else None)
+    finally:
+        conn.close()
+    return _quiet_hours_state()
 
 
 @app.post("/next")
