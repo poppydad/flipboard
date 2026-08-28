@@ -51,6 +51,14 @@ type it literally). Name it "Post to Board" and add it to your Home
 Screen. Now it's one tap → type → done, no page load at all. You can also
 say "Hey Siri, Post to Board".
 
+**Seeing and deleting what's queued.** The same page lists every message
+waiting to be shown, marked **ON NOW** for the one currently on the board
+and **PINNED** where it applies, each with a **Delete** button (it asks to
+confirm first). Messages posted as templates or colour grids show a decoded
+preview — `WEATHER / 75F / OVERCAST` — so you can tell them apart even
+though they were never plain text. Fewer messages queued means each one
+comes back around sooner.
+
 **Quiet hours**: between **8pm and 7am** the board goes dark and silent on
 purpose (there's an infant in the house). Messages you post still queue up
 and appear after 7am.
@@ -104,7 +112,7 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   channels/                Scheduler + plugin interface + milestone/weather/f1
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   106 pytest tests
+  tests/                   110 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal

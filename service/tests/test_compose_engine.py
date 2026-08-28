@@ -1,5 +1,5 @@
 """Tests for service/compose/ per build plan §10's explicit test list."""
-from service.compose import CHARSET, COLS, ROWS, align, normalize, render, wrap
+from service.compose import CHARSET, COLS, ROWS, align, decode as _decode_text, normalize, render, wrap
 from service.compose.normalize import NEWLINE
 from service.compose.templates import TEMPLATES, banner, chips, countdown, list_template, stat
 
@@ -192,3 +192,28 @@ def test_emoji_table_keys_are_single_codepoints():
 
     for emoji in _EMOJI_TO_COLOR_NAME:
         assert len(emoji) == 1, f"{emoji!r} is {len(emoji)} codepoints and can never match"
+
+
+# --- decode (grid -> readable text, for the queue list) ------------------
+
+
+def test_decode_drops_blank_rows_and_joins_with_slashes():
+    assert _decode_text(stat("WEATHER", "75F", "OVERCAST")) == "WEATHER / 75F / OVERCAST"
+
+
+def test_decode_collapses_the_centering_padding():
+    # banner() centers, so the row is mostly blanks — none of which should
+    # survive into a preview shown in a list.
+    assert _decode_text(banner("HELLO")) == "HELLO"
+
+
+def test_decode_of_a_blank_grid_is_empty():
+    from service.compose import BLANK_GRID
+
+    assert _decode_text(list(BLANK_GRID)) == ""
+
+
+def test_decode_of_a_pure_chip_pattern_is_empty_not_garbage():
+    # Chips have no character form. Callers show "(pattern)" for this.
+    red = next(f.code for f in CHARSET.flaps if f.type == "chip" and f.color == "#C0392B")
+    assert _decode_text([red] * (ROWS * COLS)) == ""

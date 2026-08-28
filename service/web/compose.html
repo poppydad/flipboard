@@ -62,7 +62,43 @@
     border: 1px solid #444;
     color: #eee;
   }
-  #status, #unpinStatus, #quietStatus { margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
+  #status, #unpinStatus, #quietStatus, #queueStatus {
+    margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em;
+  }
+  #queue { list-style: none; margin: 0; padding: 0; }
+  #queue li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid #262626;
+    font-size: 0.95rem;
+  }
+  #queue li:last-child { border-bottom: none; }
+  #queue .label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  #queue .tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: #8a8a8a;
+    margin-left: 0.4rem;
+    white-space: nowrap;
+  }
+  #queue li.showing .label { color: #e8e4d8; }
+  #queue li:not(.showing) .label { color: #9a9a9a; }
+  /* Destructive and small: never the thing your thumb finds by accident. */
+  #queue .del {
+    width: auto;
+    margin: 0;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    font-weight: 400;
+    background: transparent;
+    border: 1px solid #3a3a3a;
+    color: #c88;
+    border-radius: 6px;
+    flex: none;
+  }
   .divider {
     margin-top: 2rem;
     padding-top: 1.5rem;
@@ -88,6 +124,12 @@
     <p>Pinned something and want it to rotate normally again?</p>
     <button id="unpinButton" type="button" class="secondary">Unpin current message</button>
     <div id="unpinStatus"></div>
+  </div>
+
+  <div class="divider">
+    <p>On the board right now, and what's queued behind it:</p>
+    <ul id="queue"></ul>
+    <div id="queueStatus"></div>
   </div>
 
   <div class="divider">
@@ -121,6 +163,7 @@
         if (!res.ok) throw new Error(await res.text());
         status.textContent = "Sent.";
         form.reset();
+        loadQueue();
       } catch (err) {
         status.textContent = "Failed: " + err.message;
       } finally {
@@ -143,12 +186,69 @@
         const res = await fetch(`/queue/${current.id}/unpin`, { method: "POST" });
         if (!res.ok) throw new Error(await res.text());
         status.textContent = "Unpinned — it'll rotate normally now.";
+        loadQueue();
       } catch (err) {
         status.textContent = "Failed: " + err.message;
       } finally {
         button.disabled = false;
       }
     });
+    // --- the queue ---------------------------------------------------
+    const queueEl = document.getElementById("queue");
+    const queueStatus = document.getElementById("queueStatus");
+
+    async function loadQueue() {
+      let items, showingId;
+      try {
+        [items, showingId] = await Promise.all([
+          fetch("/queue").then((r) => r.json()),
+          fetch("/current").then((r) => r.json()).then((c) => c.id),
+        ]);
+      } catch {
+        queueStatus.textContent = "Couldn't reach the board.";
+        return;
+      }
+
+      queueEl.replaceChildren();
+      for (const m of items) {
+        const li = document.createElement("li");
+        if (m.id === showingId) li.className = "showing";
+
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = m.preview;
+        if (m.id === showingId || m.pinned) {
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = m.pinned ? "PINNED" : "ON NOW";
+          label.append(tag);
+        }
+
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "del";
+        del.textContent = "Delete";
+        del.addEventListener("click", async () => {
+          if (!confirm("Delete this message?\n\n" + m.preview)) return;
+          del.disabled = true;
+          queueStatus.textContent = "Deleting…";
+          try {
+            const res = await fetch("/queue/" + m.id, { method: "DELETE" });
+            if (!res.ok) throw new Error(await res.text());
+            queueStatus.textContent = "Deleted.";
+            await loadQueue();
+          } catch (err) {
+            queueStatus.textContent = "Failed: " + err.message;
+            del.disabled = false;
+          }
+        });
+
+        li.append(label, del);
+        queueEl.append(li);
+      }
+      if (!items.length) queueEl.textContent = "Nothing queued.";
+    }
+
     // --- quiet hours -------------------------------------------------
     const quietState = document.getElementById("quietState");
     const quietButton = document.getElementById("quietButton");
@@ -206,6 +306,7 @@
     });
 
     loadQuiet();
+    loadQueue();
   </script>
 </body>
 </html>

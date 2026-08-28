@@ -9,13 +9,14 @@ This is what replaces service/compose.py's Phase 2 placeholder wholesale.
 from .align import align
 from .charset import BLANK_CODE, BLANK_GRID, CHARSET, CHARSET_VERSION, COLS, ROWS
 from .normalize import normalize
-from .render import render
+from .render import decode, render
 from .smart import pick as pick_smart_template
 from .templates import TEMPLATES, banner, chips, countdown, list_template, stat
 from .wrap import wrap
 
 __all__ = [
     "align",
+    "decode",
     "banner",
     "BLANK_CODE",
     "BLANK_GRID",

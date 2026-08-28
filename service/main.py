@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from . import db
 from .channels.scheduler import start_scheduler, stop_scheduler
-from .compose import BLANK_GRID, CHARSET_VERSION, pick_smart_template
+from .compose import BLANK_GRID, CHARSET_VERSION, decode, pick_smart_template
 from .config import (
     BRIGHTNESS_NORMAL,
     BRIGHTNESS_QUIET_FLOOR,
@@ -79,6 +79,7 @@ class GridMessageIn(BaseModel):
 class MessageOut(BaseModel):
     id: int
     text: str
+    preview: str
     priority: int
     dwell_seconds: int
     pinned: bool
@@ -86,9 +87,15 @@ class MessageOut(BaseModel):
 
 
 def _row_to_out(row, pages: int = 1) -> MessageOut:
+    # raw_text is NULL for anything built from a template or posted as a raw
+    # grid (channels, /compose/smart, /message/grid), which is most of the
+    # queue — so decode the grid for something a person can actually
+    # recognise in a list.
+    preview = row["raw_text"] or decode(json.loads(row["grid"])) or "(pattern)"
     return MessageOut(
         id=row["id"],
         text=row["raw_text"] or "",
+        preview=preview,
         priority=row["priority"],
         dwell_seconds=row["dwell_seconds"],
         pinned=bool(row["pinned"]),
