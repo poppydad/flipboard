@@ -60,6 +60,7 @@ interface CurrentPayload {
   charset_version: number;
   sound_enabled: boolean;
   brightness: number;
+  contrast?: number;
 }
 
 let warnedVersionMismatch = false;
@@ -90,6 +91,7 @@ async function poll(): Promise<void> {
     // BRIGHTNESS_QUIET_FLOOR). Older payloads may omit it; full brightness
     // is the safe default there.
     renderer.setBrightness(typeof data.brightness === "number" ? data.brightness : 1);
+    renderer.setContrast(typeof data.contrast === "number" ? data.contrast : 1);
   } catch {
     // LAN board, service may not be up yet — a failed fetch just means "nothing changed."
   }

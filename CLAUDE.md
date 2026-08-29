@@ -331,6 +331,25 @@ first, falling back to this heuristic version, not replace it — the
 heuristic path costs nothing and needs no network, so it's worth
 keeping as the fallback rather than deleting once Claude is wired in.
 
+## Brightness: three layers, only two of them reachable
+
+- **Image brightness/contrast** — a CSS filter on the canvas
+  (`BoardCanvas.setBrightness`/`setContrast`), set from the phone form via
+  `POST /settings/display` and persisted in the `settings` table. This is
+  the only knob that reaches the *pixels*.
+- **Panel power** — `deploy/panel.sh` polls `GET /current`'s `brightness`
+  and runs `wlopm --off/--on`. It follows that field rather than
+  reimplementing the schedule, so the phone form's snooze and
+  `FLIPBOARD_QUIET_HOURS` come along for free. `ExecStopPost` turns the
+  panel back on, so stopping the unit can never strand a dark board.
+- **The monitor's own backlight** — **not reachable.** `ddcutil` reads the
+  ARZOPA's EDID fine but gets nothing at I2C 0x37: the panel doesn't
+  implement DDC/CI, and no HDMI monitor exposes `/sys/class/backlight`.
+  This is why "brightness 0" alone isn't darkness — a black LCD is still a
+  lit LCD — and why the panel gets powered off outright during quiet
+  hours. That answers build plan probe 6 for *this* monitor: off, not dim,
+  because dim isn't available.
+
 ## The holiday channel and `compose/art.py`
 
 Thirteen festivals, each with a greeting and chip art, on the day —

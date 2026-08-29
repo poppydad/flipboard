@@ -59,6 +59,13 @@ preview — `WEATHER / 75F / OVERCAST` — so you can tell them apart even
 though they were never plain text. Fewer messages queued means each one
 comes back around sooner.
 
+**Brightness and contrast.** The same page has two sliders. They dim the
+*image* the board draws, not the monitor's backlight — this panel has no
+DDC/CI (confirmed with `ddcutil`: it answers with its EDID but ignores
+commands), so its real brightness is only reachable from its own buttons.
+During quiet hours the panel is powered down outright instead, which is
+what `deploy/panel.sh` does.
+
 **Quiet hours**: between **8pm and 7am** the board goes dark and silent on
 purpose (there's an infant in the house). Messages you post still queue up
 and appear after 7am.
@@ -98,7 +105,8 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   main.py                  GET /current, POST /message, POST /message/grid,
                            POST /compose/smart, GET /queue, DELETE /queue/{id},
                            POST /queue/{id}/unpin, POST /next,
-                           GET+POST /settings/quiet-hours, GET /compose,
+                           GET+POST /settings/quiet-hours,
+                           GET+POST /settings/display, GET /compose,
                            GET /compose/grid
   db.py                    SQLite schema (messages, display_log, settings)
   compose/                 The layout engine — normalize/wrap/align/render/

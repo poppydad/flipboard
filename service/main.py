@@ -119,12 +119,16 @@ def get_current():
         message_id = row["id"]
 
     quiet = is_quiet_hours()
+    brightness, contrast = settings.display()
     return {
         "id": message_id,
         "cells": cells,
         "charset_version": CHARSET_VERSION,
         "sound_enabled": not quiet,
-        "brightness": BRIGHTNESS_QUIET_FLOOR if quiet else BRIGHTNESS_NORMAL,
+        # Quiet hours overrides whatever level was set by hand — it's a
+        # floor, not a preference.
+        "brightness": BRIGHTNESS_QUIET_FLOOR if quiet else brightness,
+        "contrast": contrast,
     }
 
 
@@ -249,6 +253,13 @@ class QuietHoursIn(BaseModel):
     snooze: bool
 
 
+class DisplayIn(BaseModel):
+    """Both optional so the phone form can move one slider at a time."""
+
+    brightness: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    contrast: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+
+
 def _quiet_hours_state() -> dict:
     until = settings.quiet_snooze_until()
     now = datetime.now().timestamp()
@@ -283,6 +294,29 @@ def set_quiet_hours(body: QuietHoursIn):
     finally:
         conn.close()
     return _quiet_hours_state()
+
+
+@app.get("/settings/display")
+def get_display():
+    brightness, contrast = settings.display()
+    return {"brightness": brightness, "contrast": contrast, "quiet_now": is_quiet_hours()}
+
+
+@app.post("/settings/display")
+def set_display(body: DisplayIn):
+    """How bright and contrasty the board renders while it's awake.
+
+    This is a CSS filter on the canvas, not the monitor's backlight — the
+    panel here has no DDC/CI, so its real brightness is only reachable from
+    its own buttons. Quiet hours still overrides this to zero; see
+    deploy/panel.sh for the part that actually powers the panel down.
+    """
+    conn = db.get_connection()
+    try:
+        settings.set_display(conn, brightness=body.brightness, contrast=body.contrast)
+    finally:
+        conn.close()
+    return get_display()
 
 
 @app.post("/next")

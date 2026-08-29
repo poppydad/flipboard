@@ -1,0 +1,27 @@
+# Keeps the physical panel in step with quiet hours. See deploy/panel.sh for
+# why rendering black isn't enough on its own.
+#
+#   systemctl --user status panel
+#   systemctl --user stop panel     # panel stays however it was last set
+#
+# If this is stopped while the panel is off, turn it back on by hand:
+#   WAYLAND_DISPLAY=wayland-0 wlopm --on '*'
+
+[Unit]
+Description=flipboard panel power (follows quiet hours)
+After=flipboard.service
+Wants=flipboard.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=%h/flipboard/deploy/panel.sh
+# Never leave the board dark because this crashed: put the panel back on
+# as the unit stops, whatever the reason.
+ExecStopPost=/usr/bin/wlopm --on *
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

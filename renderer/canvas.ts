@@ -19,6 +19,8 @@ export class BoardCanvas {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly n: number;
   private metrics: TileMetrics;
+  private brightness = 1;
+  private contrast = 1;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -40,8 +42,27 @@ export class BoardCanvas {
    * a redraw, so it survives dirty-tile updates and costs nothing per frame.
    */
   setBrightness(value: number): void {
-    const b = Math.max(0, Math.min(1, value));
-    this.canvas.style.filter = b === 1 ? "" : `brightness(${b})`;
+    this.brightness = Math.max(0, Math.min(1, value));
+    this.applyFilter();
+  }
+
+  /**
+   * Image contrast, 1 being untouched. Same CSS-filter mechanism as
+   * brightness. Note this acts on what the canvas draws, not on the panel:
+   * on an HDMI monitor without DDC/CI (which is this one) there is no way
+   * to reach the real backlight, so "dimmer" here means greyer pixels on a
+   * still-lit panel.
+   */
+  setContrast(value: number): void {
+    this.contrast = Math.max(0, Math.min(2, value));
+    this.applyFilter();
+  }
+
+  private applyFilter(): void {
+    const parts: string[] = [];
+    if (this.brightness !== 1) parts.push(`brightness(${this.brightness})`);
+    if (this.contrast !== 1) parts.push(`contrast(${this.contrast})`);
+    this.canvas.style.filter = parts.join(" ");
   }
 
   /** Recomputes tile size/origin from the current canvas pixel size. Call after any resize. */

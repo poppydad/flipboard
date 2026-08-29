@@ -21,7 +21,8 @@ echo "==> Installing the user units"
 mkdir -p "$UNITS"
 cp "$REPO/deploy/flipboard.service" "$UNITS/flipboard.service"
 cp "$REPO/deploy/kiosk.service" "$UNITS/kiosk.service"
-chmod +x "$REPO/deploy/kiosk.sh"
+cp "$REPO/deploy/panel.service" "$UNITS/panel.service"
+chmod +x "$REPO/deploy/kiosk.sh" "$REPO/deploy/panel.sh"
 
 # An earlier version of this script put the kiosk in labwc's autostart. Pi OS
 # never reads the user copy of that file, so the line was dead — and leaving
@@ -34,11 +35,12 @@ if [ -f "$AUTOSTART" ] && grep -qF "deploy/kiosk.sh" "$AUTOSTART"; then
 fi
 
 systemctl --user daemon-reload
-systemctl --user enable flipboard kiosk
+systemctl --user enable flipboard kiosk panel
 systemctl --user restart flipboard
 systemctl --user restart kiosk
+systemctl --user restart panel
 
 echo
 echo "Done. The board comes back on its own after a reboot."
-echo "  systemctl --user status flipboard kiosk"
-echo "  journalctl --user -u flipboard -u kiosk -f"
+echo "  systemctl --user status flipboard kiosk panel"
+echo "  journalctl --user -u flipboard -u kiosk -u panel -f"

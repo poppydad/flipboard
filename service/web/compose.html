@@ -62,7 +62,26 @@
     border: 1px solid #444;
     color: #eee;
   }
-  #status, #unpinStatus, #quietStatus, #queueStatus {
+  .slider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+  }
+  .slider label {
+    margin: 0;
+    flex: 0 0 5.5rem;
+    font-size: 0.85rem;
+  }
+  .slider input[type=range] { flex: 1; min-width: 0; accent-color: #e8e4d8; }
+  .slider span {
+    flex: 0 0 3rem;
+    text-align: right;
+    font-size: 0.85rem;
+    color: #bbb;
+    font-variant-numeric: tabular-nums;
+  }
+  #status, #unpinStatus, #quietStatus, #queueStatus, #displayStatus {
     margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em;
   }
   #queue { list-style: none; margin: 0; padding: 0; }
@@ -130,6 +149,21 @@
     <p>On the board right now, and what's queued behind it:</p>
     <ul id="queue"></ul>
     <div id="queueStatus"></div>
+  </div>
+
+  <div class="divider">
+    <p>Display</p>
+    <div class="slider">
+      <label for="brightness">Brightness</label>
+      <input type="range" id="brightness" min="10" max="100" step="5" />
+      <span id="brightnessOut">100%</span>
+    </div>
+    <div class="slider">
+      <label for="contrast">Contrast</label>
+      <input type="range" id="contrast" min="50" max="150" step="5" />
+      <span id="contrastOut">100%</span>
+    </div>
+    <div id="displayStatus"></div>
   </div>
 
   <div class="divider">
@@ -305,8 +339,61 @@
       }
     });
 
+    // --- display ------------------------------------------------------
+    const bright = document.getElementById("brightness");
+    const contrast = document.getElementById("contrast");
+    const brightOut = document.getElementById("brightnessOut");
+    const contrastOut = document.getElementById("contrastOut");
+    const displayStatus = document.getElementById("displayStatus");
+
+    const pct = (v) => Math.round(v * 100) + "%";
+
+    async function loadDisplay() {
+      try {
+        const d = await fetch("/settings/display").then((r) => r.json());
+        bright.value = Math.round(d.brightness * 100);
+        contrast.value = Math.round(d.contrast * 100);
+        brightOut.textContent = pct(d.brightness);
+        contrastOut.textContent = pct(d.contrast);
+        displayStatus.textContent = d.quiet_now
+          ? "Quiet hours is on, so the board is dark regardless."
+          : "";
+      } catch {
+        displayStatus.textContent = "Couldn't reach the board.";
+      }
+    }
+
+    let saveTimer;
+    function onSlide() {
+      brightOut.textContent = bright.value + "%";
+      contrastOut.textContent = contrast.value + "%";
+      // Dragging a slider fires continuously; only POST once it settles,
+      // or every frame would be a database write.
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        displayStatus.textContent = "Saving…";
+        try {
+          const res = await fetch("/settings/display", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              brightness: bright.value / 100,
+              contrast: contrast.value / 100,
+            }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          displayStatus.textContent = "Saved — the board follows within 5s.";
+        } catch (err) {
+          displayStatus.textContent = "Failed: " + err.message;
+        }
+      }, 400);
+    }
+    bright.addEventListener("input", onSlide);
+    contrast.addEventListener("input", onSlide);
+
     loadQuiet();
     loadQueue();
+    loadDisplay();
   </script>
 </body>
 </html>
