@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 175/175 passing
+.venv/bin/python -m pytest service/tests/   # 179/179 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,

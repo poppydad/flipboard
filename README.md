@@ -5,9 +5,9 @@ tiles that flip through letters/numbers/colors one at a time to spell out a
 message, the same mechanism as an old airport departure board (this project
 replaces a $3,400 commercial one, a "Vestaboard," with a Raspberry Pi and a
 screen). See `flipboard-build-plan-v2.md` for the full plan — this repo
-covers **Phase 0** through **Phase 3**, plus 4 of 6 **Phase 4** channels and a holiday channel
-(milestone, weather, f1, mufc) plus holiday, and the scheduler/quiet-hours infrastructure they
-run on — see "Channels and quiet hours" below.
+covers **Phase 0** through **Phase 3**, plus 4 of 6 **Phase 4** channels
+(milestone, weather, f1, mufc), a holiday channel, and the
+scheduler/quiet-hours infrastructure they run on — see "Channels and quiet hours" below.
 
 If you just want to **put a message on a board someone else already set
 up**, no coding or terminal required — see "Posting a message" below.
@@ -115,14 +115,15 @@ service/                  FastAPI + SQLite. LAN only, no auth.
   selection.py             Deterministic pick: pinned first, then round-robin by
                            least-recently-shown, priority breaking ties
   config.py                is_quiet_hours() — see "Channels and quiet hours"
-  settings.py              Runtime settings that survive a restart (quiet-hours snooze)
+  settings.py              Runtime settings that survive a restart (quiet-hours
+                           snooze, display brightness/contrast)
   messages.py              create_message(): shared by POST /message and channels;
                            validate_grid(): the POST /message/grid boundary check
   channels/                Scheduler + plugin interface + milestone/weather/f1/
                            mufc/holiday
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   175 pytest tests
+  tests/                   179 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
