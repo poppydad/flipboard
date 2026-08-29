@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..compose.charset import COLS
 from ..compose.templates import countdown, stat
-from .base import Channel, ChannelMessage, countdown_parts
+from .base import Channel, ChannelMessage, countdown_parts, expires_in
 from .http import get_json
 
 # 360 is Manchester United; eng.1 is the Premier League. The team schedule
@@ -99,7 +99,7 @@ def _countdown_message(now: datetime) -> ChannelMessage | None:
         label = f"{prefix} {_opponent(them)}"[:COLS]
 
     number, unit = countdown_parts(remaining)
-    return ChannelMessage(grid=countdown(label, number, unit), priority=20, dwell_seconds=300)
+    return ChannelMessage(grid=countdown(label, number, unit), priority=20, dwell_seconds=300, expires_at=expires_in(3))
 
 
 def _score(competitor: dict) -> int | None:
@@ -152,7 +152,7 @@ def _results_message(now: datetime) -> ChannelMessage | None:
     # stat() puts each field on its own fixed row, so keep the scoreline to
     # one: "MUFC 2-1 ARSENAL" leaves room for the longer club names.
     line = f"{_NAME} {ours}-{theirs} {_opponent(them)}"[:COLS]
-    return ChannelMessage(grid=stat(verdict, line), priority=20, dwell_seconds=300)
+    return ChannelMessage(grid=stat(verdict, line), priority=20, dwell_seconds=300, expires_at=expires_in(3))
 
 
 def run() -> ChannelMessage | None:

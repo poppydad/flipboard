@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from ..compose.templates import countdown, list_template
-from .base import Channel, ChannelMessage, countdown_parts
+from .base import Channel, ChannelMessage, countdown_parts, expires_in
 from .http import get_json
 
 _BASE = "https://api.openf1.org/v1"
@@ -64,7 +64,7 @@ def _countdown_message(session: dict, now: datetime) -> ChannelMessage | None:
 
     number, unit = countdown_parts(remaining)
     grid = countdown("LIGHTS OUT", number, unit)
-    return ChannelMessage(grid=grid, priority=15, dwell_seconds=300)
+    return ChannelMessage(grid=grid, priority=15, dwell_seconds=300, expires_at=expires_in(3))
 
 
 def _results_message(session: dict, now: datetime) -> ChannelMessage | None:
@@ -89,7 +89,7 @@ def _results_message(session: dict, now: datetime) -> ChannelMessage | None:
 
     items = [f"{r['position']} {names.get(r.get('driver_number'), '???')}" for r in top3]
     grid = list_template("RESULTS", items)
-    return ChannelMessage(grid=grid, priority=15, dwell_seconds=300)
+    return ChannelMessage(grid=grid, priority=15, dwell_seconds=300, expires_at=expires_in(3))
 
 
 def run() -> ChannelMessage | None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date
 
 from ..compose.templates import banner
-from .base import Channel, ChannelMessage
+from .base import Channel, ChannelMessage, expires_at_midnight
 
 REFERENCE_DATE = date(2025, 11, 8)
 
@@ -16,7 +16,8 @@ REFERENCE_DATE = date(2025, 11, 8)
 def run() -> ChannelMessage:
     days = (date.today() - REFERENCE_DATE).days
     grid = banner(f"{days} DAYS OLD")
-    return ChannelMessage(grid=grid, priority=30, dwell_seconds=300)
+    # The count is only right for today.
+    return ChannelMessage(grid=grid, priority=30, dwell_seconds=300, expires_at=expires_at_midnight())
 
 
 CHANNEL = Channel(name="milestone", cron="0 8 * * *", run=run)

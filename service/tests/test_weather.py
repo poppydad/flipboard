@@ -60,4 +60,17 @@ def test_missing_temperature_field_returns_none(monkeypatch):
 
 def test_channel_registered_with_correct_schedule():
     assert weather.CHANNEL.name == "weather"
-    assert weather.CHANNEL.cron == "30 6,16 * * *"  # 6:30am and 4:00pm, per build plan §11
+    assert weather.CHANNEL.cron == "15 7,10,13,16,19 * * *"  # every 3h through the day
+
+
+def test_a_reading_goes_stale_rather_than_lying(monkeypatch):
+    # Found live: the 4:30pm reading was still claiming 82F at 11pm, because
+    # channel messages had no expiry and _supersede only retires the previous
+    # one when a *new* one lands.
+    import time
+
+    monkeypatch.setattr(weather, "get_json", lambda *a, **k: {"current": {"temperature_2m": 72.0, "weather_code": 0}})
+    message = weather.run()
+    assert message.expires_at is not None
+    hours = (message.expires_at - time.time()) / 3600
+    assert 3 < hours < 5  # longer than the 3h refresh, shorter than an evening

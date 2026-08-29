@@ -123,7 +123,7 @@ service/                  FastAPI + SQLite. LAN only, no auth.
                            mufc/holiday
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   179 pytest tests
+  tests/                   180 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -632,8 +632,8 @@ Four of six are built, plus one that wasn't in the plan:
 - **milestone** — a days-old counter (`banner`), 8:00am daily. No
   external API, just a reference date.
 - **weather** — current conditions at a fixed location (`stat`), via
-  [Open-Meteo](https://open-meteo.com) (free, keyless), 6:30am and
-  4:00pm.
+  [Open-Meteo](https://open-meteo.com) (free, keyless), refreshed every
+  three hours through the day.
 - **f1** — countdown to lights-out before a race, top-3 results for a
   couple of days after, via [OpenF1](https://openf1.org) (free,
   keyless). Polls hourly and decides for itself whether there's

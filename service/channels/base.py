@@ -7,8 +7,30 @@ never raw cell codes it assembled by hand.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+import time
+from datetime import datetime, time as time_of_day, timedelta
 from typing import Callable, Optional
+
+
+def expires_in(hours: float) -> float:
+    """An absolute expiry `hours` from now, as an epoch float.
+
+    Every channel message should have one. A reading with no expiry stays
+    eligible forever: the 4:30pm weather sat on the board reading 82F at
+    11pm, and before that an f1 countdown owned the display for a week.
+    `_supersede` only retires the *previous* message when a new one lands —
+    it can't help when the channel simply doesn't run again, which is
+    exactly the case at night and whenever an API is down.
+
+    Pick a span a bit longer than the polling interval, so a single failed
+    fetch doesn't blank the channel but a run of them does.
+    """
+    return time.time() + hours * 3600
+
+
+def expires_at_midnight() -> float:
+    """End of today — for messages that are about the day itself."""
+    return datetime.combine(datetime.now().date(), time_of_day.max).timestamp()
 
 
 def countdown_parts(remaining: timedelta) -> tuple[str, str]:

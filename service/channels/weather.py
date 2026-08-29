@@ -1,12 +1,12 @@
 """
 weather channel (build plan §11): current conditions via Open-Meteo
 (free, keyless — https://open-meteo.com), as a `stat` template.
-Runs at 6:30am and 4:00pm.
+Refreshes every three hours through the day.
 """
 from __future__ import annotations
 
 from ..compose.templates import stat
-from .base import Channel, ChannelMessage
+from .base import Channel, ChannelMessage, expires_in
 from .http import get_json
 
 LATITUDE = 40.304251
@@ -66,7 +66,13 @@ def run() -> ChannelMessage | None:
     condition = _WEATHER_CODES.get(current.get("weather_code"), "")
 
     grid = stat("WEATHER", f"{round(temp)}F", condition)
-    return ChannelMessage(grid=grid, priority=25, dwell_seconds=300)
+    # Four hours: longer than the three-hour refresh so one failed fetch
+    # doesn't blank it, short enough that an afternoon reading can't still
+    # be on the board at bedtime.
+    return ChannelMessage(grid=grid, priority=25, dwell_seconds=300, expires_at=expires_in(4))
 
 
-CHANNEL = Channel(name="weather", cron="30 6,16 * * *", run=run)
+# Every three hours through the day. Twice a day was too coarse: the 4:30pm
+# reading was still claiming 82F at 11pm. The first run is just after quiet
+# hours lift so the morning board isn't showing yesterday evening.
+CHANNEL = Channel(name="weather", cron="15 7,10,13,16,19 * * *", run=run)

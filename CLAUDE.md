@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 179/179 passing
+.venv/bin/python -m pytest service/tests/   # 180/180 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -330,6 +330,29 @@ falling back to `banner` per §11) and let `/compose/smart` try that
 first, falling back to this heuristic version, not replace it — the
 heuristic path costs nothing and needs no network, so it's worth
 keeping as the fallback rather than deleting once Claude is wired in.
+
+## Every channel message expires
+
+Reported from the room: the board read 82F on a 21C night. The data was
+never wrong — Open-Meteo had 69.5F at that moment — the *message* was seven
+hours old. weather posted at 16:30 with no `expires_at` and stayed eligible
+all evening.
+
+`scheduler.py`'s `_supersede` only retires a channel's previous message
+when a new one lands. It cannot help when the channel doesn't run again,
+which is every night (quiet hours gates it) and any time an API is down.
+So expiry has to come from the message itself:
+
+- `base.expires_in(hours)` / `base.expires_at_midnight()` — use one or the
+  other in every channel.
+- weather 4h, and its cron went from twice a day to every three hours
+  (`15 7,10,13,16,19`). Twice a day was always going to show an afternoon
+  reading at bedtime.
+- f1/mufc 3h (they poll hourly, so this rides out a couple of failures).
+- milestone and holiday: midnight, since both are about *today*.
+
+Pick a span longer than the polling interval and shorter than the time it
+would take to become a lie.
 
 ## Brightness: three layers, only two of them reachable
 
