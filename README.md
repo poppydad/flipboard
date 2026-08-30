@@ -123,7 +123,7 @@ service/                  FastAPI + SQLite. LAN only, no auth.
                            mufc/holiday
   web/compose.html         Phone-friendly posting form, no framework
   web/grid.html            Color grid designer — paint all 132 cells directly
-  tests/                   180 pytest tests
+  tests/                   192 pytest tests
 
 cli/
   sim.ts                   Simulate text -> board transitions from the terminal
@@ -639,9 +639,16 @@ Four of six are built, plus one that wasn't in the plan:
   keyless). Polls hourly and decides for itself whether there's
   anything worth posting — "race weekend" isn't a fixed schedule, so
   the cron is just a polling cadence.
+
+**Live scores.** mufc and f1 poll every five minutes. While a match or
+race is actually in progress they pin a live message — the running
+scoreline (`LIVE 77' / MUFC 4-1 IPSWICH`) or the current top three — so
+the board shows that and nothing else until it finishes, then reverts to
+the normal rotation. Polls that find an unchanged score don't post again;
+they just keep the existing message alive.
 - **mufc** — countdown to the next Manchester United fixture, the
   scoreline for a couple of days after one finishes, via ESPN's public
-  site API (free, keyless). Hourly poll, same reasoning as f1.
+  site API (free, keyless).
 - **holiday** — a greeting and a piece of colour-chip art on the day of
   thirteen festivals: Pongal, Holi, both Eids, Raksha Bandhan, Onam,
   Janmashtami, Ganesh Chaturthi, Navratri, Durga Puja, Dussehra, Diwali

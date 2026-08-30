@@ -9,6 +9,7 @@ for the same reason (see _supersede).
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -53,6 +54,41 @@ def _supersede(conn, source: str, now: float) -> int:
     return cur.rowcount
 
 
+def _refresh_if_unchanged(conn, channel: Channel, message, now: float) -> bool:
+    """If the channel's live message already says exactly this, just push its
+    expiry out and report that nothing needs inserting.
+
+    Matters most for the five-minute live-score polls: a match sits at the
+    same scoreline for most of its length, and without this every poll would
+    retire the current row and insert an identical one. That resets
+    `last_shown` to never-shown on every cycle, which distorts the
+    round-robin, and it writes ~150 rows an afternoon to say one thing.
+
+    Extending the expiry rather than leaving it alone is the point — the
+    message stays *current* precisely because we just re-confirmed it.
+    """
+    row = conn.execute(
+        "SELECT id, grid, raw_text, pinned FROM messages "
+        "WHERE source = ? AND (expires_at IS NULL OR expires_at > ?) "
+        "ORDER BY id DESC LIMIT 1",
+        (channel.name, now),
+    ).fetchone()
+    if row is None:
+        return False
+
+    same = (
+        row["raw_text"] == message.text
+        and bool(row["pinned"]) == message.pinned
+        and (message.grid is None or json.loads(row["grid"]) == message.grid)
+    )
+    if not same:
+        return False
+
+    conn.execute("UPDATE messages SET expires_at = ? WHERE id = ?", (message.expires_at, row["id"]))
+    conn.commit()
+    return True
+
+
 def run_channel(channel: Channel) -> None:
     """Runs one channel's job. Exposed at module level (not nested in
     start_scheduler) so it's directly unit-testable without spinning up
@@ -72,6 +108,9 @@ def run_channel(channel: Channel) -> None:
 
     conn = db.get_connection()
     try:
+        now = time.time()
+        if _refresh_if_unchanged(conn, channel, message, now):
+            return
         superseded = _supersede(conn, channel.name, time.time())
         if superseded:
             logger.info("channel %r superseded %d previous message(s)", channel.name, superseded)

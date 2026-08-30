@@ -159,6 +159,71 @@ def test_missing_results_or_drivers_returns_none(monkeypatch):
     assert f1.run() is None
 
 
-def test_channel_registered_with_hourly_polling_cadence():
+def test_channel_polls_every_five_minutes():
     assert f1.CHANNEL.name == "f1"
-    assert f1.CHANNEL.cron == "0 * * * *"
+    assert f1.CHANNEL.cron == "*/5 * * * *"
+
+
+# --- live race ----------------------------------------------------------
+
+
+def _live_api(monkeypatch, now, start, end, records, drivers=None):
+    def fake_get_json(url, **params):
+        if "sessions" in url:
+            return [{
+                "session_name": "Race", "session_key": 7,
+                "date_start": _iso(start), "date_end": _iso(end),
+            }]
+        if "position" in url:
+            return records
+        if "drivers" in url:
+            return drivers if drivers is not None else [
+                {"driver_number": 1, "name_acronym": "VER"},
+                {"driver_number": 4, "name_acronym": "NOR"},
+                {"driver_number": 16, "name_acronym": "LEC"},
+            ]
+        return None
+
+    monkeypatch.setattr(f1, "get_json", fake_get_json)
+    monkeypatch.setattr(f1, "_now", lambda: now)
+
+
+def test_a_race_in_progress_shows_the_current_top_three(monkeypatch):
+    now = datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc)
+    _live_api(monkeypatch, now, now - timedelta(minutes=40), now + timedelta(minutes=50), [
+        {"position": 1, "date": _iso(now - timedelta(minutes=30)), "driver_number": 4},
+        {"position": 1, "date": _iso(now - timedelta(minutes=2)), "driver_number": 1},   # newer
+        {"position": 2, "date": _iso(now - timedelta(minutes=2)), "driver_number": 4},
+        {"position": 3, "date": _iso(now - timedelta(minutes=5)), "driver_number": 16},
+    ])
+    text = _decode(f1.run().grid)
+    assert "LIVE" in text
+    assert "1 VER" in text  # the later P1 record wins, not the earlier one
+    assert "2 NOR" in text
+    assert "3 LEC" in text
+
+
+def test_a_live_race_is_pinned_and_expires_quickly(monkeypatch):
+    import time
+
+    now = datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc)
+    _live_api(monkeypatch, now, now - timedelta(minutes=10), now + timedelta(hours=1), [
+        {"position": 1, "date": _iso(now), "driver_number": 1},
+    ])
+    message = f1.run()
+    assert message.pinned is True
+    assert 10 < (message.expires_at - time.time()) / 60 < 20
+
+
+def test_before_lights_out_is_a_countdown_not_a_live_board(monkeypatch):
+    now = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
+    _live_api(monkeypatch, now, now + timedelta(hours=2), now + timedelta(hours=4), [])
+    text = _decode(f1.run().grid)
+    assert "LIGHTS OUT" in text
+    assert "LIVE" not in text
+
+
+def test_no_position_data_falls_through_rather_than_showing_an_empty_board(monkeypatch):
+    now = datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc)
+    _live_api(monkeypatch, now, now - timedelta(minutes=10), now + timedelta(hours=1), [])
+    assert f1.run() is None

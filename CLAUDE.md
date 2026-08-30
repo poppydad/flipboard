@@ -20,7 +20,7 @@ npm run dev                       # Vite dev server, open /display.html
 
 python3 -m venv .venv && .venv/bin/pip install -r service/requirements-dev.txt
 .venv/bin/uvicorn service.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m pytest service/tests/   # 180/180 passing
+.venv/bin/python -m pytest service/tests/   # 192/192 passing
 ```
 
 Nothing here is stale or half-working — the whole engine layer is finished,
@@ -330,6 +330,33 @@ falling back to `banner` per §11) and let `/compose/smart` try that
 first, falling back to this heuristic version, not replace it — the
 heuristic path costs nothing and needs no network, so it's worth
 keeping as the fallback rather than deleting once Claude is wired in.
+
+## Live scores take the whole board
+
+mufc and f1 poll every five minutes (`*/5`), and while a match or race is
+actually running they post a **pinned** message — which is what "don't
+display anything else for the duration" means in this codebase, since
+`selection.py` already gives pinned exclusive hold.
+
+- **The live match is invisible to the endpoint that lists results.**
+  ESPN's bare team schedule only returns finished matches; a game in
+  progress appears only under `?fixture=true`, with `status.type.state ==
+  "in"` and a running clock. Using the per-league `scoreboard` endpoint
+  instead would have worked but would miss cup competitions.
+- **OpenF1's `/position` is a log of position changes, not a standings
+  snapshot.** `_live_message` filters to `position<=3` and keeps the most
+  recent record per place — the last time anyone took P1 is who holds P1.
+- **Live messages expire in 15 minutes** while being re-confirmed every 5.
+  A pinned message that outlived the feed going quiet would hold the board
+  indefinitely, which is the exact failure mode the f1 countdown already
+  demonstrated once.
+- **`scheduler._refresh_if_unchanged` is what makes 5-minute polling
+  survivable.** A scoreline sits unchanged for most of a match, so an
+  identical poll bumps the existing row's expiry instead of superseding
+  and re-inserting. Without it every cycle writes a new row whose
+  `last_shown` is never-shown, which distorts the round-robin — and it
+  also finally fixes the 89%-duplicate problem the f1 countdown had at
+  hourly polling.
 
 ## Every channel message expires
 

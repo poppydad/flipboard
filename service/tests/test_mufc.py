@@ -190,6 +190,64 @@ def test_output_is_always_a_full_valid_grid(api):
         assert 0 <= code < CHARSET.size
 
 
-def test_channel_registered_as_an_hourly_poll(api):
+def test_channel_polls_every_five_minutes(api):
     assert mufc.CHANNEL.name == "mufc"
-    assert mufc.CHANNEL.cron == "0 * * * *"
+    assert mufc.CHANNEL.cron == "*/5 * * * *"
+
+
+# --- live match ---------------------------------------------------------
+
+
+def _live(kickoff, opponent="Ipswich", home=True, us_score=0, them_score=0, clock="74'"):
+    e = _event(kickoff, opponent, home=home, us_score=us_score, them_score=them_score)
+    e["competitions"][0]["status"] = {
+        "displayClock": clock,
+        "type": {"state": "in", "completed": False, "detail": clock},
+    }
+    return e
+
+
+def test_a_match_in_progress_shows_the_running_score(api):
+    api["fixtures"] = [_live(NOW - timedelta(minutes=74), us_score=4, them_score=1)]
+    text = _decode(mufc.run().grid)
+    assert "LIVE 74'" in text
+    assert "MUFC 4-1 IPSWICH" in text
+
+
+def test_a_live_match_is_pinned_so_nothing_else_shows(api):
+    # "not display anything else for the match duration" — pinned is the
+    # mechanism the selector already has for that.
+    api["fixtures"] = [_live(NOW - timedelta(minutes=20))]
+    assert mufc.run().pinned is True
+
+
+def test_a_live_scoreline_expires_quickly(api):
+    # If the feed stops saying "in", a pinned board must not outlast the game.
+    import time
+
+    api["fixtures"] = [_live(NOW - timedelta(minutes=20))]
+    minutes = (mufc.run().expires_at - time.time()) / 60
+    assert 10 < minutes < 20
+
+
+def test_live_outranks_both_the_result_and_the_countdown(api):
+    api["played"] = [
+        _event(NOW - timedelta(hours=3), "Arsenal", completed=True, us_score=3, them_score=0)
+    ]
+    api["fixtures"] = [
+        _live(NOW - timedelta(minutes=30), "Ipswich", us_score=1, them_score=1),
+        _event(NOW + timedelta(days=4), "Everton"),
+    ]
+    text = _decode(mufc.run().grid)
+    assert "LIVE" in text
+    assert "WON" not in text and "EVERTON" not in text
+
+
+def test_a_finished_match_is_not_treated_as_live(api):
+    api["fixtures"] = [_event(NOW - timedelta(hours=2), "Ipswich", completed=True, us_score=2, them_score=0)]
+    assert mufc.run() is None  # 'completed' without state 'in' is not live
+
+
+def test_a_live_match_with_no_score_yet_is_still_shown(api):
+    api["fixtures"] = [_live(NOW - timedelta(minutes=3), clock="3'", us_score=0, them_score=0)]
+    assert "MUFC 0-0 IPSWICH" in _decode(mufc.run().grid)

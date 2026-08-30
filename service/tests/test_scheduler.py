@@ -5,6 +5,7 @@ import pytest
 
 from service.channels.base import Channel, ChannelMessage
 from service.channels.scheduler import run_channel
+from service.compose import COLS, ROWS
 from service.db import SCHEMA
 from service.messages import create_message
 from service.selection import Selector
@@ -212,3 +213,43 @@ def test_multi_page_channel_message_survives_its_own_supersede(conn, monkeypatch
     live = _eligible(conn)
     assert len(live) > 1, "a paginated message should keep all of its pages eligible"
     assert all(r["raw_text"] == long_text for r in live)
+
+
+# --- an unchanged poll is not news --------------------------------------
+
+
+def _channel(grid, pinned=False, expires_at=None):
+    from service.channels.base import Channel, ChannelMessage
+
+    return Channel(
+        name="mufc",
+        cron="*/5 * * * *",
+        run=lambda: ChannelMessage(grid=grid, pinned=pinned, expires_at=expires_at, dwell_seconds=300),
+    )
+
+
+def test_an_identical_repost_bumps_the_expiry_instead_of_inserting(conn, monkeypatch):
+    # A live scoreline sits unchanged for most of a match. Five-minute polls
+    # must not write a new row each time — that resets last_shown to
+    # never-shown every cycle and distorts the rotation.
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+
+    grid = [0] * (ROWS * COLS)
+    run_channel(_channel(grid, pinned=True, expires_at=1_800_000_000.0))
+    run_channel(_channel(grid, pinned=True, expires_at=1_900_000_000.0))
+
+    rows = conn.execute("SELECT id, expires_at FROM messages WHERE source = 'mufc'").fetchall()
+    assert len(rows) == 1                       # one row, not two
+    assert rows[0]["expires_at"] == 1_900_000_000.0  # and it was kept alive
+
+
+def test_a_changed_scoreline_does_insert(conn, monkeypatch):
+    monkeypatch.setattr("service.channels.scheduler.is_quiet_hours", lambda: False)
+
+    run_channel(_channel([0] * (ROWS * COLS)))
+    run_channel(_channel([1] + [0] * (ROWS * COLS - 1)))  # a goal
+
+    live = conn.execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE source = 'mufc' AND expires_at IS NULL"
+    ).fetchone()
+    assert live["n"] == 1  # the old one was superseded, the new one stands
