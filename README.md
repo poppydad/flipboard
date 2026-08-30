@@ -59,6 +59,12 @@ preview — `WEATHER / 75F / OVERCAST` — so you can tell them apart even
 though they were never plain text. Fewer messages queued means each one
 comes back around sooner.
 
+**Sound.** The board clicks once per flap, through the monitor's speakers
+over HDMI. It's silenced during quiet hours. If it's ever silent when it
+shouldn't be, see "Sound" in the troubleshooting notes — the two things
+that break it are the Pi's HDMI audio profile and Chromium's autoplay
+policy, both handled by `deploy/`.
+
 **Brightness and contrast.** The same page has two sliders. They dim the
 *image* the board draws, not the monitor's backlight — this panel has no
 DDC/CI (confirmed with `ddcutil`: it answers with its EDID but ignores

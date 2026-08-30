@@ -381,6 +381,31 @@ So expiry has to come from the message itself:
 Pick a span longer than the polling interval and shorter than the time it
 would take to become a lie.
 
+## Sound needed two unrelated fixes
+
+Reported as "there is no sound". Neither cause was in the audio code —
+`audio.ts` had been synthesising clicks correctly the whole time.
+
+- **PipeWire had no HDMI sink at all**, only a `Dummy Output`. The Pi 5's
+  `vc4-hdmi` ALSA device advertises exactly one format,
+  `IEC958_SUBFRAME_LE` (raw S/PDIF framing), so `hw:1,0` rejects ordinary
+  PCM with "Setting of hwparams failed" — `plughw:1,0` works because it
+  converts. WirePlumber wasn't applying ACP to the card, so it found
+  nothing usable and fell back. `deploy/hdmi-audio.conf` forces
+  `api.alsa.use-acp`, which produces the normal "Digital Stereo (HDMI)"
+  profile. Installed by `install.sh`; without it a rebuilt Pi is silent
+  again.
+- **Chromium never started the AudioContext.** Web Audio begins suspended
+  and resumes on the first user gesture; `main.ts` listens for
+  `pointerdown`/`keydown` to do that. On a wall panel nobody ever clicks,
+  so it stayed suspended forever. `--autoplay-policy=no-user-gesture-required`
+  in `kiosk.sh` is the fix. The tell is `wpctl status`: before, Chromium
+  appeared only as an *input* client; with audio actually running it shows
+  output clients too.
+- The monitor does have speakers — `/proc/asound/card1/eld#0.0` reports
+  `speakers [0x1] FL/FR` and an LPCM SAD. Check that file before assuming
+  a panel can't play sound.
+
 ## Brightness: three layers, only two of them reachable
 
 - **Image brightness/contrast** — a CSS filter on the canvas

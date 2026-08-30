@@ -15,6 +15,10 @@
 #      minutes isn't a board. swayidle is what would do the blanking.
 #   4. Don't reuse the normal browser profile. A crash flag or restore-tabs
 #      prompt in the everyday profile would land on the board.
+#   5. Don't wait for a click before making a sound. Web Audio starts
+#      suspended and normally resumes on the first user gesture — but this
+#      is a wall panel, so that gesture never comes and the flap clicks are
+#      silent forever. --autoplay-policy is what unblocks it.
 
 URL="http://localhost:8000/display.html"
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -46,6 +50,7 @@ exec chromium \
     --disable-infobars \
     --disable-session-crashed-bubble \
     --disable-features=Translate \
+    --autoplay-policy=no-user-gesture-required \
     --check-for-update-interval=31536000 \
     --user-data-dir="$HOME/.config/flipboard-kiosk" \
     "$URL"

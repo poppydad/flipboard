@@ -34,6 +34,11 @@ if [ -f "$AUTOSTART" ] && grep -qF "deploy/kiosk.sh" "$AUTOSTART"; then
     [ -s "$AUTOSTART" ] || rm -f "$AUTOSTART"
 fi
 
+# HDMI audio: without this WirePlumber finds no usable output on the Pi's
+# vc4-hdmi card and falls back to a Dummy Output sink. See the file itself.
+mkdir -p "$HOME/.config/wireplumber/wireplumber.conf.d"
+cp "$REPO/deploy/hdmi-audio.conf" "$HOME/.config/wireplumber/wireplumber.conf.d/50-hdmi-audio.conf"
+
 systemctl --user daemon-reload
 systemctl --user enable flipboard kiosk panel
 systemctl --user restart flipboard
